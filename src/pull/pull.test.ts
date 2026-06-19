@@ -20,6 +20,7 @@ const fakeClient = {
   getStatus: async () => ({ workspaceChange: [
     { changeStatus: "updated", tag: { tagId: "10", name: "GA4 Event" } },
     { changeStatus: "added", builtInVariable: { type: "pageUrl", name: "Page URL" } },
+    { changeStatus: "added", customTemplate: { templateId: "t9", name: "My Template" } },
   ] }),
 } as any;
 
@@ -34,5 +35,7 @@ test("pullContainer populates entities, refs, triggers, changes, meta", async ()
   expect(changes.map((c) => c.id)).toContain("10");
   expect(changes.map((c) => c.id)).toContain("pageUrl");
   expect(changes.find((c) => c.id === "pageUrl")?.kind).toBe("builtin_variable");
+  expect(changes.map((c) => c.id)).toContain("t9");
+  expect(changes.find((c) => c.id === "t9")?.kind).toBe("template");
   expect(getMeta(db, "last_pulled_at")).toBe("2026-06-19T00:00:00Z");
 });

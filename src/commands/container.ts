@@ -1,15 +1,17 @@
 import type { Cmd } from "../command.ts";
-import { configPath, statePath } from "../paths.ts";
+import { configPath, statePath, tokenCachePath } from "../paths.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
 import { loadState, saveState } from "../config/state.ts";
 import { openDb } from "../cache/db.ts";
 import { getMeta } from "../cache/repo.ts";
 import { GtmClient } from "../gtm/client.ts";
 import { getAccountToken } from "../auth/token.ts";
+import { loginOAuth } from "../auth/oauth.ts";
 import { pullContainer } from "../pull/pull.ts";
 import { resolveAlias } from "./_shared.ts";
 import { format } from "../output.ts";
 import { ensureDirFor } from "../util/fs.ts";
+import { chmod } from "node:fs/promises";
 
 const TEMPLATE = `# gallium config
 # [accounts.<name>]
@@ -63,8 +65,26 @@ export const cmdContainerShow: Cmd = async (_p, flags) => {
   return 0;
 };
 
+export const cmdContainerLogin: Cmd = async (positionals, flags) => {
+  const alias = positionals[0] ?? await resolveAlias(flags);
+  const cfg = await loadConfig(configPath());
+  const r = resolveContainer(cfg, alias);
+  if (r.account.mode !== "oauth") {
+    throw new Error(`Account '${r.accountName}' uses ${r.account.mode} auth; 'login' is only for oauth accounts.`);
+  }
+  const refreshToken = await loginOAuth(r.account.client_id, r.account.client_secret);
+  const refreshPath = `${tokenCachePath(r.accountName)}.refresh`;
+  await ensureDirFor(refreshPath);
+  await Bun.write(refreshPath, refreshToken);
+  await chmod(refreshPath, 0o600);
+  console.log(`Logged in account '${r.accountName}'. Refresh token saved.`);
+  return 0;
+};
+
 export const cmdContainerStatus: Cmd = async (_p, flags) => {
   const alias = await resolveAlias(flags);
+  const cfg = await loadConfig(configPath());
+  resolveContainer(cfg, alias);
   const db = await openDb(alias);
   const lastPulled = getMeta(db, "last_pulled_at");
   console.log(format({ alias, last_pulled_at: lastPulled ?? null }, { json: !!flags.json }));

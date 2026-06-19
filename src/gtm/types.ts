@@ -23,7 +23,7 @@ export interface GtmTemplate { templateId: string; name: string; templateData?: 
 export interface WorkspaceChange {
   changeStatus: "added" | "deleted" | "updated" | "none" | string;
   tag?: GtmTag; trigger?: GtmTrigger; variable?: GtmVariable; folder?: GtmFolder;
-  builtInVariable?: GtmBuiltInVariable; template?: GtmTemplate;
+  builtInVariable?: GtmBuiltInVariable; customTemplate?: GtmTemplate;
 }
 export interface WorkspaceStatus {
   workspaceChange?: WorkspaceChange[];

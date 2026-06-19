@@ -3,6 +3,7 @@ import { tokenCachePath } from "../paths.ts";
 import type { AccountAuth } from "../config/config.ts";
 import { refreshAccessToken, TAGMANAGER_READONLY_SCOPE } from "./oauth.ts";
 import { exchangeJwtForToken, signServiceAccountJwt, type ServiceAccountKey } from "./serviceAccount.ts";
+import { chmod } from "node:fs/promises";
 
 interface CachedToken { access_token: string; expires_at_ms: number; }
 
@@ -23,6 +24,7 @@ export async function getAccessToken(opts: CoreOpts): Promise<string> {
   const next: CachedToken = { access_token: fresh.access_token, expires_at_ms: opts.nowMs + fresh.expires_in * 1000 };
   await ensureDirFor(opts.cachePath);
   await Bun.write(opts.cachePath, JSON.stringify(next));
+  await chmod(opts.cachePath, 0o600);
   return fresh.access_token;
 }
 

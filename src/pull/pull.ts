@@ -53,7 +53,7 @@ export async function pullContainer(db: Database, client: GtmClient, ws: string,
 
   const status = await client.getStatus(ws);
   for (const ch of status.workspaceChange ?? []) {
-    const e = ch.tag ?? ch.trigger ?? ch.variable ?? ch.folder ?? ch.builtInVariable ?? ch.template;
+    const e = ch.tag ?? ch.trigger ?? ch.variable ?? ch.folder ?? ch.builtInVariable ?? ch.customTemplate;
     if (!e) continue;
     const kind = ch.tag ? "tag"
       : ch.trigger ? "trigger"
@@ -62,7 +62,7 @@ export async function pullContainer(db: Database, client: GtmClient, ws: string,
       : ch.builtInVariable ? "builtin_variable"
       : "template";
     const id = (ch.tag?.tagId ?? ch.trigger?.triggerId ?? ch.variable?.variableId
-      ?? ch.folder?.folderId ?? ch.builtInVariable?.type ?? ch.template?.templateId) as string;
+      ?? ch.folder?.folderId ?? ch.builtInVariable?.type ?? ch.customTemplate?.templateId) as string;
     recordChange(db, kind, id, (e as any).name ?? "", ch.changeStatus);
   }
 

@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import type { Cmd } from "./command.ts";
 import {
   cmdContainerInit, cmdContainerUse, cmdContainerShow, cmdContainerList, cmdContainerStatus, cmdContainerPull,
+  cmdContainerLogin,
 } from "./commands/container.ts";
 import { cmdRefs } from "./commands/refs.ts";
 import { cmdTag, cmdTrigger } from "./commands/entity.ts";
@@ -17,7 +18,7 @@ const FLAT: Record<string, Cmd> = {
 };
 const GROUPED: Record<string, Record<string, Cmd>> = {
   container: { init: cmdContainerInit, use: cmdContainerUse, show: cmdContainerShow,
-    list: cmdContainerList, status: cmdContainerStatus, pull: cmdContainerPull },
+    list: cmdContainerList, status: cmdContainerStatus, pull: cmdContainerPull, login: cmdContainerLogin },
   code: { search: cmdCodeSearch },
   skill: { install: cmdSkillInstall, path: cmdSkillPath },
 };

@@ -11,6 +11,7 @@ Use the `gallium` CLI to answer read-only questions about a Google Tag Manager c
 
 1. Run `gallium container status --json` (add `-c <alias>` if it isn't the default).
 2. If `last_pulled_at` is null → run `gallium container pull <alias>` first.
+   - For OAuth accounts, the user must run `gallium container login <alias>` once before the first pull to store the refresh token.
 3. If `last_pulled_at` is stale (>~1h) or the question implies recent edits ("did someone just change…") → suggest a pull.
 4. If no container is selected → ask which alias, or suggest `gallium container use <alias>` to set a default.
 

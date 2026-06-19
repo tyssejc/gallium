@@ -55,6 +55,14 @@ Set the env var before running commands:
 export GALLIUM_OAUTH_SECRET="your-secret"
 ```
 
+After configuring an OAuth account, run the login command once to authorize and store the refresh token:
+
+```bash
+gallium container login acme/web
+```
+
+This opens a browser to complete the OAuth flow and saves the refresh token to `~/.cache/gallium/.tokens/`. You only need to do this once per account.
+
 #### Service account
 
 ```toml
@@ -94,6 +102,7 @@ This fetches all tags, triggers, variables, and folders from the GTM API and sto
 ```bash
 gallium container init                   # write starter config
 gallium container use <alias>            # set default container
+gallium container login <alias>          # OAuth accounts: authorize and store refresh token (run once before first pull)
 gallium container pull <alias>           # pull workspace into local cache
 gallium container status [-c <alias>]    # show alias + last_pulled_at
 gallium container list                   # list all configured containers
@@ -134,7 +143,8 @@ gallium list folders [--json] [-c <alias>]
 ### Skill install
 
 ```bash
-gallium skill install
+gallium skill install   # copy skill files into ~/.claude/skills/gallium/
+gallium skill path      # print the install directory path
 ```
 
 Installs the `gallium` Claude skill into `~/.claude/skills/gallium/` (respects `$CLAUDE_CONFIG_DIR`). This lets Claude Code use `gallium` to answer GTM questions automatically.

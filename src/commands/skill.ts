@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { skillInstallDir } from "../paths.ts";
 
 function skillSourceDir(): string {
-  // src/commands/skill.ts → ../../src/skill
+  // from src/commands/, one level up to src/, then into skill/
   return join(dirname(fileURLToPath(import.meta.url)), "..", "skill");
 }
 

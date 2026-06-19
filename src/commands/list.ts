@@ -13,6 +13,9 @@ export const cmdListEntities: Cmd = async (positionals, flags) => {
   const kind = KINDS[kindArg ?? ""];
   if (!kind) throw new Error(`usage: gallium list <${Object.keys(KINDS).join("|")}> [filters]`);
   const db = await openPulled(await resolveAlias(flags));
+  if (flags.unused && kind !== "variable") {
+    console.error("note: --unused only applies to 'list variables'; ignoring");
+  }
   if (kind === "variable" && flags.unused) {
     console.log(format(unusedVariables(db), { json: !!flags.json, columns: ["name", "id"] }));
     return 0;
