@@ -34,7 +34,7 @@ Where `cadmium` syncs a Reactor *property* and answers Adobe Analytics questions
 src/
   auth/        OAuth user flow (default) + service-account key (opt-in)
   gtm/         Tag Manager API v2 client
-  sync/        Pull container workspace + latest version → SQLite snapshot
+  pull/        Pull container workspace + latest version → SQLite snapshot (v2 adds push/)
   cache/       SQLite read/query layer (bun:sqlite)
   commands/    One module per command group (refs, tag, trigger, code, diff, list, container)
   config/      ~/.config/gallium/config.toml — container aliases
@@ -44,7 +44,9 @@ bin/gallium.ts
 Formula/       Homebrew formula
 ```
 
-Each module has one clear job and a defined interface: `gtm/` knows the API and nothing about SQLite; `cache/` knows SQLite and nothing about the API; `sync/` wires them; `commands/` only read from `cache/`.
+Each module has one clear job and a defined interface: `gtm/` knows the API and nothing about SQLite; `cache/` knows SQLite and nothing about the API; `pull/` wires them; `commands/` only read from `cache/`.
+
+**Command naming:** the v1 read transfer is `pull` (not `sync`) — `sync` implies bidirectionality, but v1 is strictly read-only. The complementary `push` (write back) arrives with the v2 authoring layer. (Follow-up, out of scope here: rename `cadmium`'s `sync` → `pull` for the same reason, to keep the two tools symmetric.)
 
 ## Auth model
 
@@ -53,9 +55,9 @@ Each module has one clear job and a defined interface: `gtm/` knows the API and 
 - **OAuth user flow (default):** interactive browser consent, refresh token cached locally under `~/.cache/gallium/.tokens/`. Acts as the user; sees every container they can. Best DX for solo client work across many containers. Matches the `cadmium` precedent.
 - **Service account (opt-in via config):** JSON key file; the SA email must be granted access per GTM account. For CI/headless/shared use. No browser.
 
-## Data model & sync
+## Data model & pull
 
-`gallium sync <alias>` pulls **two snapshots** per alias into SQLite:
+`gallium pull <alias>` pulls **two snapshots** per alias into SQLite:
 
 1. The **working workspace** (the live editable copy) — the default source for most queries.
 2. The **latest published version** — used as the baseline for `diff`.
@@ -70,9 +72,9 @@ Entities synced (web container, v1): **tags, triggers, variables, built-in varia
 
 Like `adobe-tags`, every question begins with a freshness check:
 
-1. `gallium container status --json` — check `last_synced_at`.
-2. If null → `gallium sync` first.
-3. If stale (~>1h) or the question implies recent edits → suggest a sync.
+1. `gallium container status --json` — check `last_pulled_at`.
+2. If null → `gallium pull` first.
+3. If stale (~>1h) or the question implies recent edits → suggest a pull.
 4. If no container is selected → ask which alias, or suggest `gallium container use <alias>` to set a default.
 
 ## v1 command set (read-only core)
@@ -94,7 +96,7 @@ Conventions (from `cadmium`): every command accepts `--json` and is parsed by th
 
 ## v2 authoring layer (fast follow — not v1)
 
-Generate + validate GTM container **import JSON**, directly attacking the Rokt-migration pain. The recurring gotchas become **named validators**:
+Generate + validate GTM container **import JSON**, directly attacking the Rokt-migration pain — surfaced via a `gallium push` command (the write-back complement to `pull`). The recurring gotchas become **named validators**:
 
 - `PARAM_TABLE` → `LIST` parameter shape
 - self-contained trigger references
