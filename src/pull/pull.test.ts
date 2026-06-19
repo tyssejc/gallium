@@ -17,7 +17,10 @@ const fakeClient = {
   listBuiltInVariables: async () => [{ type: "pageUrl", name: "Page URL" }],
   listFolders: async () => [],
   listTemplates: async () => [],
-  getStatus: async () => ({ workspaceChange: [{ changeStatus: "updated", tag: { tagId: "10", name: "GA4 Event" } }] }),
+  getStatus: async () => ({ workspaceChange: [
+    { changeStatus: "updated", tag: { tagId: "10", name: "GA4 Event" } },
+    { changeStatus: "added", builtInVariable: { type: "pageUrl", name: "Page URL" } },
+  ] }),
 } as any;
 
 test("pullContainer populates entities, refs, triggers, changes, meta", async () => {
@@ -27,6 +30,9 @@ test("pullContainer populates entities, refs, triggers, changes, meta", async ()
   expect(tagFiringTriggers(db, "10")).toEqual([{ id: "50", name: "All Pages", relation: "firing" }]);
   expect(unusedVariables(db).map((v) => v.name)).toEqual(["Orphan JS"]);
   expect(grepCode(db, "foo_bar").map((r) => r.id)).toContain("v2");
-  expect(pendingChanges(db, {}).map((c) => c.id)).toEqual(["10"]);
+  const changes = pendingChanges(db, {});
+  expect(changes.map((c) => c.id)).toContain("10");
+  expect(changes.map((c) => c.id)).toContain("pageUrl");
+  expect(changes.find((c) => c.id === "pageUrl")?.kind).toBe("builtin_variable");
   expect(getMeta(db, "last_pulled_at")).toBe("2026-06-19T00:00:00Z");
 });
