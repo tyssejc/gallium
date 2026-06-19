@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { openDb } from "../cache/db.ts";
 import { upsertEntity, recordVariableRef, setMeta } from "../cache/repo.ts";
 import { saveState } from "../config/state.ts";
-import { statePath, cacheDir } from "../paths.ts";
+import { statePath } from "../paths.ts";
 import { cmdRefs } from "./refs.ts";
 
 let dir: string;
