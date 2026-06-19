@@ -35,3 +35,18 @@ test("resolveContainer throws on unknown alias", () => {
   const cfg = parseConfig(TOML, { GALLIUM_SECRET: "shh" });
   expect(() => resolveContainer(cfg, "nope")).toThrow(/Unknown container alias/);
 });
+
+test("parseConfig throws when a referenced env var is missing", () => {
+  expect(() => parseConfig(TOML, {})).toThrow(/missing env var/);
+});
+
+test("resolveContainer throws when the container's account is undefined", () => {
+  const cfg = parseConfig(`
+[containers."x/y"]
+account = "ghost"
+account_id = "1"
+container_id = "2"
+workspace_id = "3"
+`, {});
+  expect(() => resolveContainer(cfg, "x/y")).toThrow(/undefined account/);
+});

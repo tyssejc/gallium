@@ -16,9 +16,8 @@ export interface ResolvedContainer {
   account: AccountAuth; accountName: string;
 }
 
-const ENV_RE = /\$\{env:([A-Z0-9_]+)\}/g;
 function substitute(value: string, env: Record<string, string | undefined>): string {
-  return value.replace(ENV_RE, (_m, name: string) => {
+  return value.replace(/\$\{env:([A-Z0-9_]+)\}/g, (_m, name: string) => {
     const v = env[name];
     if (v === undefined) throw new Error(`Config references missing env var: ${name}`);
     return v;
@@ -31,11 +30,11 @@ export function parseConfig(toml: string, env: Record<string, string | undefined
   for (const [name, a] of Object.entries(raw.accounts ?? {})) {
     const acct = a as any;
     if (acct.mode === "service_account") {
-      accounts[name] = { mode: "service_account", key_file: acct.key_file };
+      accounts[name] = { mode: "service_account", key_file: substitute(acct.key_file ?? "", env) };
     } else {
       accounts[name] = {
         mode: "oauth",
-        client_id: acct.client_id,
+        client_id: substitute(acct.client_id ?? "", env),
         client_secret: substitute(acct.client_secret ?? "", env),
       };
     }
