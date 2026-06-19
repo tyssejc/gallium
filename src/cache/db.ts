@@ -19,7 +19,7 @@ export function openDbAt(path: string): Database {
     const tables = db.query(
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
     ).all() as { name: string }[];
-    for (const t of tables) db.exec(`DROP TABLE IF EXISTS ${t.name};`);
+    for (const t of tables) db.exec(`DROP TABLE IF EXISTS "${t.name}";`);
     db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);");
   }
   db.exec(DDL);
