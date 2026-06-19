@@ -7,10 +7,10 @@ function jsonResponse(body: unknown): Response {
 
 test("listTags follows nextPageToken, concatenates, and sends a Bearer header", async () => {
   const calls: string[] = [];
-  let seenAuth = "";
+  const seenAuths: string[] = [];
   const fetchFn = (async (url: string, init?: RequestInit) => {
     calls.push(url);
-    seenAuth = (init?.headers as Record<string, string>)?.Authorization ?? seenAuth;
+    seenAuths.push((init?.headers as Record<string, string>)?.Authorization ?? "");
     if (url.includes("pageToken=p2")) return jsonResponse({ tag: [{ tagId: "2", name: "B" }] });
     return jsonResponse({ tag: [{ tagId: "1", name: "A" }], nextPageToken: "p2" });
   }) as unknown as typeof fetch;
@@ -19,7 +19,8 @@ test("listTags follows nextPageToken, concatenates, and sends a Bearer header", 
   const tags = await client.listTags(ws);
   expect(tags.map((t) => t.tagId)).toEqual(["1", "2"]);
   expect(calls[0]).toContain("/accounts/111/containers/222/workspaces/3/tags");
-  expect(seenAuth).toBe("Bearer tok");
+  expect(seenAuths.length).toBe(2);
+  expect(seenAuths.every((a) => a === "Bearer tok")).toBe(true);
 });
 
 test("non-2xx throws with status and body", async () => {
