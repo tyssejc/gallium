@@ -1,7 +1,7 @@
 import { ensureDirFor } from "../util/fs.ts";
 import { tokenCachePath } from "../paths.ts";
 import type { AccountAuth } from "../config/config.ts";
-import { refreshAccessToken } from "./oauth.ts";
+import { refreshAccessToken, TAGMANAGER_READONLY_SCOPE } from "./oauth.ts";
 import { exchangeJwtForToken, signServiceAccountJwt, type ServiceAccountKey } from "./serviceAccount.ts";
 
 interface CachedToken { access_token: string; expires_at_ms: number; }
@@ -34,7 +34,7 @@ export async function getAccountToken(accountName: string, account: AccountAuth)
     return getAccessToken({
       cachePath, nowMs: Date.now(),
       refresher: () => exchangeJwtForToken(key, signServiceAccountJwt(key,
-        "https://www.googleapis.com/auth/tagmanager.readonly", Math.floor(Date.now() / 1000))),
+        TAGMANAGER_READONLY_SCOPE, Math.floor(Date.now() / 1000))),
     });
   }
   // OAuth: refresh token was stored at login time next to the access-token cache.
