@@ -74,6 +74,21 @@ export const cmdContainerStatus: Cmd = async (_p, flags) => {
   return 0;
 };
 
+export const cmdContainerAdd: Cmd = async (positionals) => {
+  const [alias, accountId, containerId, workspaceId] = positionals;
+  if (!alias || !accountId || !containerId || !workspaceId)
+    throw new Error("usage: gallium container add <alias> <accountId> <containerId> <workspaceId>");
+  const path = configPath();
+  const file = Bun.file(path);
+  if (!(await file.exists())) throw new Error(`No config at ${path}. Run 'gallium container init' first.`);
+  const existing = await loadConfig(path);
+  if (existing.containers[alias]) throw new Error(`Container alias '${alias}' already exists.`);
+  const block = `\n[containers."${alias}"]\naccount_id = "${accountId}"\ncontainer_id = "${containerId}"\nworkspace_id = "${workspaceId}"\n`;
+  await Bun.write(path, (await file.text()) + block);
+  console.log(`Added container '${alias}'.`);
+  return 0;
+};
+
 export const cmdContainerPull: Cmd = async (positionals, flags) => {
   const alias = positionals[0] ?? await resolveAlias(flags);
   const cfg = await loadConfig(configPath());

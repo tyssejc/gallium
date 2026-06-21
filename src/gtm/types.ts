@@ -20,6 +20,10 @@ export interface GtmBuiltInVariable { type: string; name: string; }
 export interface GtmFolder { folderId: string; name: string; }
 export interface GtmTemplate { templateId: string; name: string; templateData?: string; }
 
+export interface GtmAccount { accountId: string; name: string; }
+export interface GtmContainer { accountId: string; containerId: string; name: string; publicId?: string; }
+export interface GtmWorkspace { workspaceId: string; name: string; }
+
 export interface WorkspaceChange {
   changeStatus: "added" | "deleted" | "updated" | "none" | string;
   tag?: GtmTag; trigger?: GtmTrigger; variable?: GtmVariable; folder?: GtmFolder;
