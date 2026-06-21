@@ -2,8 +2,8 @@ import { parseArgs } from "node:util";
 import type { Cmd } from "./command.ts";
 import {
   cmdContainerInit, cmdContainerUse, cmdContainerShow, cmdContainerList, cmdContainerStatus, cmdContainerPull,
-  cmdContainerLogin,
 } from "./commands/container.ts";
+import { cmdLogin } from "./commands/auth.ts";
 import { cmdRefs } from "./commands/refs.ts";
 import { cmdTag, cmdTrigger } from "./commands/entity.ts";
 import { cmdCodeSearch } from "./commands/code.ts";
@@ -14,11 +14,11 @@ import { VERSION } from "./version.ts";
 
 // Flat verb table for single-word commands; noun→verb for grouped ones.
 const FLAT: Record<string, Cmd> = {
-  refs: cmdRefs, tag: cmdTag, trigger: cmdTrigger, diff: cmdDiff, dirty: cmdDirty, list: cmdListEntities,
+  login: cmdLogin, refs: cmdRefs, tag: cmdTag, trigger: cmdTrigger, diff: cmdDiff, dirty: cmdDirty, list: cmdListEntities,
 };
 const GROUPED: Record<string, Record<string, Cmd>> = {
   container: { init: cmdContainerInit, use: cmdContainerUse, show: cmdContainerShow,
-    list: cmdContainerList, status: cmdContainerStatus, pull: cmdContainerPull, login: cmdContainerLogin },
+    list: cmdContainerList, status: cmdContainerStatus, pull: cmdContainerPull },
   code: { search: cmdCodeSearch },
   skill: { install: cmdSkillInstall, path: cmdSkillPath },
 };
