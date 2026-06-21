@@ -1,6 +1,6 @@
 ---
 name: gallium
-description: Use when answering read-only questions about a Google Tag Manager container — which tags fire on a trigger, what references a variable, what custom code touches a string, what's changed in the workspace vs. the live version, or listing/auditing tags, triggers, and variables. Drives the `gallium` CLI.
+description: Use when answering read-only questions about a Google Tag Manager container — which tags fire on a trigger, what references a variable, what custom code touches a string, what's changed in the workspace vs. the live version, listing/auditing tags, triggers, and variables, or discovering accounts/containers/workspaces. Drives the `gallium` CLI.
 ---
 
 # GTM container analysis
@@ -11,11 +11,24 @@ Use the `gallium` CLI to answer read-only questions about a Google Tag Manager c
 
 1. Run `gallium container status --json` (add `-c <alias>` if it isn't the default).
 2. If `last_pulled_at` is null → run `gallium container pull <alias>` first.
-   - For OAuth accounts, the user must run `gallium container login <alias>` once before the first pull to store the refresh token.
+   - For OAuth accounts, the user must run `gallium login` once (top-level, not per-container) before the first pull to store the refresh token. One login authorizes all containers.
+   - If no alias exists yet, discover IDs with `gallium accounts` / `gallium containers` and register one with `gallium container add <alias> <accountId> <containerId> <workspaceId>`.
 3. If `last_pulled_at` is stale (>~1h) or the question implies recent edits ("did someone just change…") → suggest a pull.
 4. If no container is selected → ask which alias, or suggest `gallium container use <alias>` to set a default.
 
 ## Question → command
+
+### Discovery
+
+| User asks | Command |
+|---|---|
+| What GTM accounts can I see? | `gallium accounts --json` |
+| What containers do I have access to? | `gallium containers --json` |
+| Containers for a specific account | `gallium containers <accountId> --json` |
+| What workspaces exist in a container? | `gallium workspaces <accountId> <containerId> --json` |
+| Save a container alias from discovered IDs | `gallium container add <alias> <accountId> <containerId> <workspaceId>` |
+
+### Analysis
 
 | User asks | Command |
 |---|---|

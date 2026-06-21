@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-19
 **Status:** Approved design, pre-implementation
+**Revised 2026-06-21:** login + discovery
 **Codename:** `gallium` (binary `gallium`; symbol Ga — a nod to Google Analytics, continuing the element-codename theme started by `cadmium` for Adobe Tags)
 
 ## Problem & motivation
@@ -50,10 +51,10 @@ Each module has one clear job and a defined interface: `gtm/` knows the API and 
 
 ## Auth model
 
-**Support both**, OAuth as the default path:
+**Single user identity** — one login authorizes all containers:
 
-- **OAuth user flow (default):** interactive browser consent, refresh token cached locally under `~/.cache/gallium/.tokens/`. Acts as the user; sees every container they can. Best DX for solo client work across many containers. Matches the `cadmium` precedent.
-- **Service account (opt-in via config):** JSON key file; the SA email must be granted access per GTM account. For CI/headless/shared use. No browser.
+- **OAuth user flow (default):** `gallium login` (top-level, not per-container) opens a browser consent screen once. The refresh token is cached under `~/.cache/gallium/.tokens/` and is reused for every container the user can access. There is a single `[oauth]` block in config (`client_id` / `client_secret`); per-container `account` fields are gone. This supersedes the original per-account framing in which each `[accounts.<name>]` block held separate credentials.
+- **Service account (opt-in fallback for headless/CI):** a `[service_account]` block (`key_file`) provides a fallback when no OAuth token is present — `getUserToken` checks for an OAuth token first, then falls back to the SA. The SA email must be granted access per GTM account. No browser required.
 
 ## Data model & pull
 
@@ -79,7 +80,20 @@ Like `adobe-tags`, every question begins with a freshness check:
 
 ## v1 command set (read-only core)
 
-All four prioritized capabilities — reference/dependency graph, custom code search, workspace diff/dirty, inventory + unused.
+All four prioritized capabilities — reference/dependency graph, custom code search, workspace diff/dirty, inventory + unused — plus account/container/workspace discovery and alias registration.
+
+### Discovery (live, uses logged-in token)
+
+| Command | Description |
+|---|---|
+| `gallium accounts` | List GTM accounts (account_id, name) |
+| `gallium containers [<accountId>]` | List containers across all accounts, or scoped to one |
+| `gallium workspaces <accountId> <containerId>` | List workspaces in a container |
+| `gallium container add <alias> <accountId> <containerId> <workspaceId>` | Save an alias from discovered IDs |
+
+Discovery commands require an active OAuth token (or service account) and hit the GTM API directly. They make it unnecessary to hand-enter IDs into config.
+
+### Analysis (local cache, no network)
 
 | User asks | Command |
 |---|---|
