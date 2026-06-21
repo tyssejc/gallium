@@ -7,9 +7,11 @@ export interface GtmTag {
   firingTriggerId?: string[]; blockingTriggerId?: string[];
   parentFolderId?: string; paused?: boolean; notes?: string;
 }
+export interface GtmCondition { type?: string; parameter?: GtmParameter[]; }
 export interface GtmTrigger {
   triggerId: string; name: string; type: string;
-  parameter?: GtmParameter[]; filter?: GtmParameter[]; customEventFilter?: GtmParameter[];
+  parameter?: GtmParameter[]; filter?: GtmCondition[]; customEventFilter?: GtmCondition[];
+  autoEventFilter?: GtmCondition[];
   parentFolderId?: string; notes?: string;
 }
 export interface GtmVariable {

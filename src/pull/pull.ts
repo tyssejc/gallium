@@ -1,10 +1,14 @@
 import type { Database } from "bun:sqlite";
 import type { GtmClient } from "../gtm/client.ts";
-import type { GtmTag, GtmTrigger, GtmVariable } from "../gtm/types.ts";
+import type { GtmParameter, GtmTag, GtmTrigger, GtmVariable } from "../gtm/types.ts";
 import {
   resetDerived, upsertEntity, recordVariableRef, recordTagTrigger, recordChange, setMeta,
 } from "../cache/repo.ts";
 import { collectParameterStrings, extractVariableRefs, buildSearchText } from "./classify.ts";
+
+function conditionStrings(conds?: Array<{ parameter?: GtmParameter[] }>): string[] {
+  return (conds ?? []).flatMap((c) => collectParameterStrings(c.parameter));
+}
 
 function recordRefs(db: Database, kind: string, id: string, strings: string[]): void {
   for (const ref of extractVariableRefs(strings)) recordVariableRef(db, kind, id, ref);
@@ -23,8 +27,12 @@ export async function pullContainer(db: Database, client: GtmClient, ws: string,
   }
 
   for (const tr of (await client.listTriggers(ws)) as GtmTrigger[]) {
-    const strings = [...collectParameterStrings(tr.parameter), ...collectParameterStrings(tr.filter),
-      ...collectParameterStrings(tr.customEventFilter)];
+    const strings = [
+      ...collectParameterStrings(tr.parameter),
+      ...conditionStrings(tr.filter),
+      ...conditionStrings(tr.customEventFilter),
+      ...conditionStrings(tr.autoEventFilter),
+    ];
     upsertEntity(db, { id: tr.triggerId, kind: "trigger", name: tr.name, type: tr.type, paused: false,
       parentFolderId: tr.parentFolderId ?? null, rawJson: JSON.stringify(tr), searchText: buildSearchText(tr.name, strings) });
     recordRefs(db, "trigger", tr.triggerId, strings);
