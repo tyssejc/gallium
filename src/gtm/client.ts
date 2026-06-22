@@ -1,5 +1,6 @@
 import type {
   GtmTag, GtmTrigger, GtmVariable, GtmBuiltInVariable, GtmFolder, GtmTemplate, WorkspaceStatus,
+  GtmAccount, GtmContainer, GtmWorkspace,
 } from "./types.ts";
 
 const BASE = "https://tagmanager.googleapis.com/tagmanager/v2";
@@ -43,4 +44,8 @@ export class GtmClient {
   listTemplates(ws: string): Promise<GtmTemplate[]> { return this.listAll(`${ws}/templates`, "template"); }
 
   getStatus(ws: string): Promise<WorkspaceStatus> { return this.getJson(`${ws}/status`); }
+
+  listAccounts(): Promise<GtmAccount[]> { return this.listAll("accounts", "account"); }
+  listContainers(accountId: string): Promise<GtmContainer[]> { return this.listAll(`accounts/${accountId}/containers`, "container"); }
+  listWorkspaces(accountId: string, containerId: string): Promise<GtmWorkspace[]> { return this.listAll(`accounts/${accountId}/containers/${containerId}/workspaces`, "workspace"); }
 }

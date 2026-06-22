@@ -1,27 +1,26 @@
 import type { Cmd } from "../command.ts";
-import { configPath, statePath, tokenCachePath } from "../paths.ts";
+import { configPath, statePath } from "../paths.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
 import { loadState, saveState } from "../config/state.ts";
 import { openDb } from "../cache/db.ts";
 import { getMeta } from "../cache/repo.ts";
 import { GtmClient } from "../gtm/client.ts";
-import { getAccountToken } from "../auth/token.ts";
-import { loginOAuth } from "../auth/oauth.ts";
+import { getUserToken } from "../auth/token.ts";
 import { pullContainer } from "../pull/pull.ts";
 import { resolveAlias } from "./_shared.ts";
 import { format } from "../output.ts";
 import { ensureDirFor } from "../util/fs.ts";
-import { chmod } from "node:fs/promises";
 
 const TEMPLATE = `# gallium config
-# [accounts.<name>]
-#   mode = "oauth"            # or "service_account"
-#   client_id = "..."        # oauth only
-#   client_secret = "\${env:GALLIUM_OAUTH_SECRET}"
-#   key_file = "/path/sa.json"  # service_account only
 #
-# [containers."<alias>"]
-#   account = "<name>"
+# [oauth]                    # run \`gallium login\` after filling these
+#   client_id = "..."
+#   client_secret = "\${env:GALLIUM_OAUTH_SECRET}"   # or a literal
+#
+# [service_account]          # optional, for headless/CI use
+#   key_file = "/path/sa.json"
+#
+# [containers."<alias>"]     # add with \`gallium container add <alias> <accountId> <containerId> <workspaceId>\`
 #   account_id = "123"
 #   container_id = "456"
 #   workspace_id = "7"
@@ -50,9 +49,9 @@ export const cmdContainerUse: Cmd = async (positionals) => {
 
 export const cmdContainerList: Cmd = async (_p, flags) => {
   const cfg = await loadConfig(configPath());
-  const rows = Object.entries(cfg.containers).map(([alias, c]) => ({ alias, account: c.account,
+  const rows = Object.entries(cfg.containers).map(([alias, c]) => ({ alias,
     account_id: c.account_id, container_id: c.container_id, workspace_id: c.workspace_id }));
-  console.log(format(rows, { json: !!flags.json, columns: ["alias", "account", "account_id", "container_id", "workspace_id"] }));
+  console.log(format(rows, { json: !!flags.json, columns: ["alias", "account_id", "container_id", "workspace_id"] }));
   return 0;
 };
 
@@ -60,24 +59,8 @@ export const cmdContainerShow: Cmd = async (_p, flags) => {
   const alias = await resolveAlias(flags);
   const cfg = await loadConfig(configPath());
   const r = resolveContainer(cfg, alias);
-  console.log(format({ alias: r.alias, account: r.accountName, accountId: r.accountId,
-    containerId: r.containerId, workspaceId: r.workspaceId, authMode: r.account.mode }, { json: !!flags.json }));
-  return 0;
-};
-
-export const cmdContainerLogin: Cmd = async (positionals, flags) => {
-  const alias = positionals[0] ?? await resolveAlias(flags);
-  const cfg = await loadConfig(configPath());
-  const r = resolveContainer(cfg, alias);
-  if (r.account.mode !== "oauth") {
-    throw new Error(`Account '${r.accountName}' uses ${r.account.mode} auth; 'login' is only for oauth accounts.`);
-  }
-  const refreshToken = await loginOAuth(r.account.client_id, r.account.client_secret);
-  const refreshPath = `${tokenCachePath(r.accountName)}.refresh`;
-  await ensureDirFor(refreshPath);
-  await Bun.write(refreshPath, refreshToken);
-  await chmod(refreshPath, 0o600);
-  console.log(`Logged in account '${r.accountName}'. Refresh token saved.`);
+  console.log(format({ alias: r.alias, accountId: r.accountId,
+    containerId: r.containerId, workspaceId: r.workspaceId }, { json: !!flags.json }));
   return 0;
 };
 
@@ -91,11 +74,26 @@ export const cmdContainerStatus: Cmd = async (_p, flags) => {
   return 0;
 };
 
+export const cmdContainerAdd: Cmd = async (positionals) => {
+  const [alias, accountId, containerId, workspaceId] = positionals;
+  if (!alias || !accountId || !containerId || !workspaceId)
+    throw new Error("usage: gallium container add <alias> <accountId> <containerId> <workspaceId>");
+  const path = configPath();
+  const file = Bun.file(path);
+  if (!(await file.exists())) throw new Error(`No config at ${path}. Run 'gallium container init' first.`);
+  const existing = await loadConfig(path);
+  if (existing.containers[alias]) throw new Error(`Container alias '${alias}' already exists.`);
+  const block = `\n[containers."${alias}"]\naccount_id = "${accountId}"\ncontainer_id = "${containerId}"\nworkspace_id = "${workspaceId}"\n`;
+  await Bun.write(path, (await file.text()) + block);
+  console.log(`Added container '${alias}'.`);
+  return 0;
+};
+
 export const cmdContainerPull: Cmd = async (positionals, flags) => {
   const alias = positionals[0] ?? await resolveAlias(flags);
   const cfg = await loadConfig(configPath());
   const r = resolveContainer(cfg, alias);
-  const token = await getAccountToken(r.accountName, r.account);
+  const token = await getUserToken(cfg);
   const client = new GtmClient(token);
   const db = await openDb(alias);
   const ws = client.wsPath(r.accountId, r.containerId, r.workspaceId);

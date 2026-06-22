@@ -7,9 +7,11 @@ export interface GtmTag {
   firingTriggerId?: string[]; blockingTriggerId?: string[];
   parentFolderId?: string; paused?: boolean; notes?: string;
 }
+export interface GtmCondition { type?: string; parameter?: GtmParameter[]; }
 export interface GtmTrigger {
   triggerId: string; name: string; type: string;
-  parameter?: GtmParameter[]; filter?: GtmParameter[]; customEventFilter?: GtmParameter[];
+  parameter?: GtmParameter[]; filter?: GtmCondition[]; customEventFilter?: GtmCondition[];
+  autoEventFilter?: GtmCondition[];
   parentFolderId?: string; notes?: string;
 }
 export interface GtmVariable {
@@ -19,6 +21,10 @@ export interface GtmVariable {
 export interface GtmBuiltInVariable { type: string; name: string; }
 export interface GtmFolder { folderId: string; name: string; }
 export interface GtmTemplate { templateId: string; name: string; templateData?: string; }
+
+export interface GtmAccount { accountId: string; name: string; }
+export interface GtmContainer { accountId: string; containerId: string; name: string; publicId?: string; }
+export interface GtmWorkspace { workspaceId: string; name: string; }
 
 export interface WorkspaceChange {
   changeStatus: "added" | "deleted" | "updated" | "none" | string;

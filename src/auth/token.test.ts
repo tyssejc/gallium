@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { getAccessToken } from "./token.ts";
+import { getAccessToken, getUserToken } from "./token.ts";
 
 test("getAccessToken caches until near expiry", async () => {
   const dir = mkdtempSync(join(tmpdir(), "gallium-tok-"));
@@ -37,4 +37,22 @@ test("getAccessToken respects 5-minute expiry buffer boundary", async () => {
     expect(result).toBe("b2");
     expect(calls).toBe(2);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("getUserToken throws 'Not logged in' when oauth is configured but no refresh token file exists", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gallium-tok-"));
+  const orig = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = dir;
+  try {
+    await expect(getUserToken({ oauth: { client_id: "c", client_secret: "s" }, containers: {} }))
+      .rejects.toThrow(/Not logged in/);
+  } finally {
+    if (orig === undefined) delete process.env.XDG_CACHE_HOME;
+    else process.env.XDG_CACHE_HOME = orig;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("getUserToken throws 'No credentials' for an empty config", async () => {
+  await expect(getUserToken({ containers: {} })).rejects.toThrow(/No credentials/);
 });
