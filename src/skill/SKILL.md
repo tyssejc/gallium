@@ -5,16 +5,23 @@ description: Use when answering read-only questions about a Google Tag Manager c
 
 # GTM container analysis
 
-Use the `gallium` CLI to answer read-only questions about a Google Tag Manager container workspace. Users refer to containers by alias (e.g. `acme/web`).
+Use the `gallium` CLI to answer read-only questions about a Google Tag Manager container workspace. Users refer to a container by alias (e.g. `acme/web`) **or** by its real name — a domain (`www.example.com`), a public ID (`GTM-XXXXXX`), or an account/brand ("the Pitman Training container").
 
 ## Preflight (always)
 
-1. Run `gallium container status --json` (add `-c <alias>` if it isn't the default).
-2. If `last_pulled_at` is null → run `gallium container pull <alias>` first.
-   - For OAuth accounts, the user must run `gallium login` once (top-level, not per-container) before the first pull to store the refresh token. One login authorizes all containers.
-   - If no alias exists yet, discover IDs with `gallium accounts` / `gallium containers` and register one with `gallium container add <alias> <accountId> <containerId> <workspaceId>`.
-3. If `last_pulled_at` is stale (>~1h) or the question implies recent edits ("did someone just change…") → suggest a pull.
-4. If no container is selected → ask which alias, or suggest `gallium container use <alias>` to set a default.
+### Step 1 — Identify the target container. Never assume the active default is what the user means.
+
+- Map the user's words to a container. First check configured aliases: `gallium container list --json`.
+  - **Matches a configured alias** → use it explicitly with `-c <alias>` on every command for this question. Do not rely on whichever default happens to be set.
+  - **Not configured yet** → discover it: `gallium accounts --json` (find the account by name) → `gallium containers <accountId> --json` (match the container by `name` or `public_id`) → `gallium workspaces <accountId> <containerId> --json` (usually "Default Workspace") → register it: `gallium container add <alias> <accountId> <containerId> <workspaceId>`.
+  - **Question names no container** → fall back to the default (`gallium container status --json` shows it). If there's no default either, ask which one.
+- When you've picked a container, **state which one you're analyzing (alias + real name)** before answering, so a wrong-container mismatch surfaces immediately. Beware similarly-named containers (e.g. `www.example.com` vs `www.example.com OLD`, or per-country variants) — match the exact name/public ID.
+
+### Step 2 — Make sure that container is pulled and fresh (use `-c <alias>` for the target).
+
+- `gallium container status -c <alias> --json` → if `last_pulled_at` is null, run `gallium container pull <alias>` first.
+  - For OAuth, the user must run `gallium login` once (top-level, not per-container) before the first pull. One login authorizes all containers.
+- If `last_pulled_at` is stale (>~1h) or the question implies recent edits ("did someone just change…") → pull again before answering.
 
 ## Question → command
 
