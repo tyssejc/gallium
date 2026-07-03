@@ -6,7 +6,7 @@ import {
 import { cmdAccounts, cmdContainers, cmdWorkspaces } from "./commands/discover.ts";
 import { cmdLogin } from "./commands/auth.ts";
 import { cmdRefs } from "./commands/refs.ts";
-import { cmdTag, cmdTrigger } from "./commands/entity.ts";
+import { cmdTag, cmdTrigger, cmdShow } from "./commands/entity.ts";
 import { cmdCodeSearch } from "./commands/code.ts";
 import { cmdDiff, cmdDirty } from "./commands/diff.ts";
 import { cmdListEntities } from "./commands/list.ts";
@@ -15,7 +15,7 @@ import { VERSION } from "./version.ts";
 
 // Flat verb table for single-word commands; noun→verb for grouped ones.
 const FLAT: Record<string, Cmd> = {
-  login: cmdLogin, refs: cmdRefs, tag: cmdTag, trigger: cmdTrigger, diff: cmdDiff, dirty: cmdDirty, list: cmdListEntities,
+  login: cmdLogin, refs: cmdRefs, tag: cmdTag, trigger: cmdTrigger, show: cmdShow, diff: cmdDiff, dirty: cmdDirty, list: cmdListEntities,
   accounts: cmdAccounts, containers: cmdContainers, workspaces: cmdWorkspaces,
 };
 const GROUPED: Record<string, Record<string, Cmd>> = {
@@ -38,6 +38,7 @@ const OPTIONS = {
   unused: { type: "boolean", default: false },
   refs: { type: "boolean", default: false },
   type: { type: "string" },
+  kind: { type: "string" },
   folder: { type: "string" },
   status: { type: "string" },
   container: { type: "string", short: "c" },

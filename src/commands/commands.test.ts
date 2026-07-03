@@ -7,6 +7,7 @@ import { upsertEntity, recordVariableRef, recordChange, setMeta } from "../cache
 import { saveState } from "../config/state.ts";
 import { statePath } from "../paths.ts";
 import { cmdRefs } from "./refs.ts";
+import { cmdShow } from "./entity.ts";
 import { cmdDirty } from "./diff.ts";
 import { cmdContainerAdd } from "./container.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
@@ -35,6 +36,32 @@ test("cmdRefs prints entities referencing a variable as JSON", async () => {
   const code = await cmdRefs(["GA4", "ID"], { json: true });
   expect(code).toBe(0);
   expect(JSON.parse(logs.join("\n"))).toEqual([{ kind: "tag", name: "GA4 Event", id: "10" }]);
+});
+
+test("cmdShow dumps an entity's full raw JSON including parameters", async () => {
+  const db = await openDb("acme/web");
+  setMeta(db, "last_pulled_at", "2026-06-19T00:00:00Z");
+  upsertEntity(db, { id: "145", kind: "tag", name: "GA4 Event | Generate Lead", type: "gaawe",
+    paused: false, parentFolderId: null,
+    rawJson: JSON.stringify({ tagId: "145", type: "gaawe", parameter: [{ key: "eventName", value: "{{Event}}" }] }),
+    searchText: "" });
+  await saveState(statePath(), { default_container: "acme/web" });
+  const code = await cmdShow(["GA4 Event | Generate Lead"], { json: true });
+  expect(code).toBe(0);
+  const out = JSON.parse(logs.join("\n"));
+  expect(out.tagId).toBe("145");
+  expect(out.parameter[0]).toEqual({ key: "eventName", value: "{{Event}}" });
+});
+
+test("cmdShow errors on an ambiguous name without --kind", async () => {
+  const db = await openDb("acme/web");
+  setMeta(db, "last_pulled_at", "2026-06-19T00:00:00Z");
+  upsertEntity(db, { id: "1", kind: "tag", name: "Dup", type: "html",
+    paused: false, parentFolderId: null, rawJson: "{}", searchText: "" });
+  upsertEntity(db, { id: "2", kind: "trigger", name: "Dup", type: "customEvent",
+    paused: false, parentFolderId: null, rawJson: "{}", searchText: "" });
+  await saveState(statePath(), { default_container: "acme/web" });
+  await expect(cmdShow(["Dup"], {})).rejects.toThrow(/multiple entities/);
 });
 
 test("cmdContainerAdd appends alias block and resolves via loadConfig", async () => {

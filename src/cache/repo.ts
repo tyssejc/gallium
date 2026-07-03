@@ -88,3 +88,7 @@ export function findEntityByName(db: Database, kind: string, name: string): Enti
     WHERE kind=? AND lower(name)=lower(?) LIMIT 1`).get(kind, name) as any;
   return r ? { ...r, paused: !!r.paused } : null;
 }
+
+export function findEntitiesByName(db: Database, name: string): { kind: string; id: string; name: string }[] {
+  return db.query(`SELECT kind,id,name FROM entities WHERE lower(name)=lower(?) ORDER BY kind`).all(name) as any;
+}

@@ -42,6 +42,7 @@ Use the `gallium` CLI to answer read-only questions about a Google Tag Manager c
 | What references `{{Variable Z}}`? | `gallium refs 'Variable Z' --json` |
 | What triggers does tag Y fire on? | `gallium tag 'Y' --json` |
 | What tags fire on trigger T? | `gallium trigger 'T' --json` |
+| Full config of tag/trigger/variable X (params, mappings) | `gallium show 'X' [--kind tag\|trigger\|variable] --json` |
 | Find custom code touching `dataLayer.foo` | `gallium code search 'dataLayer.foo' --json` |
 | What changed vs. the live version? | `gallium diff --json` |
 | Anything edited-but-unpublished / paused? | `gallium dirty --json` |

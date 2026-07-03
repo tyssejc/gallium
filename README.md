@@ -149,6 +149,10 @@ gallium tag '<Tag Name>' [--json] [-c <alias>]
 gallium trigger '<Trigger Name>' [--json] [-c <alias>]
 # The trigger's details plus which tags it fires and which it blocks.
 
+gallium show '<Name>' [--kind tag|trigger|variable] [--json] [-c <alias>]
+# The entity's full raw JSON — every parameter, mapping, and setting.
+# --kind disambiguates when a tag/trigger/variable share a name.
+
 gallium code search '<pattern>' [--json] [-c <alias>]
 # Full-text search across all custom HTML, custom JS, and template fields.
 
@@ -214,6 +218,7 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 | What references `{{Variable Z}}`? | `gallium refs 'Variable Z' --json` |
 | What triggers does tag Y fire on? | `gallium tag 'Y' --json` |
 | What tags fire on trigger T? | `gallium trigger 'T' --json` |
+| Full config of tag/trigger/variable X | `gallium show 'X' [--kind tag\|trigger\|variable] --json` |
 | Find custom code touching `dataLayer.foo` | `gallium code search 'dataLayer.foo' --json` |
 | What changed vs. the live version? | `gallium diff --json` |
 | Anything edited-but-unpublished / paused? | `gallium dirty --json` |
