@@ -7,8 +7,13 @@ Read-only Google Tag Manager container analysis CLI. Answers questions about GTM
 ### Homebrew (recommended)
 
 ```bash
-brew tap tyssejc/gallium https://github.com/tyssejc/gallium
-brew install gallium
+brew install tyssejc/tap/gallium
+```
+
+Then enable the Claude Code skill:
+
+```bash
+gallium skill install
 ```
 
 ### From source (bun required)

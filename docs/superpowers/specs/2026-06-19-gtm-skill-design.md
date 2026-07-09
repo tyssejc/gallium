@@ -10,7 +10,7 @@
 Working with Google Tag Manager from an agent harness has two recurring friction points:
 
 1. **Answering questions about a container is tedious.** "What fires this trigger?", "what reads `{{Variable Z}}`?", "what changed since the last publish?", "is there a Custom HTML tag touching `dataLayer.foo`?" — all require clicking through the GTM UI or hand-rolling API calls.
-2. **Hand-building container import JSON is error-prone.** Surfaced during the Rokt → mParticle migration (honeylove, May 2026): a repeated `edit → jq/python build → import → fix-validation-error` loop, with recurring gotchas (`PARAM_TABLE`→`LIST` shape, self-contained trigger refs, `parentFolderId` integrity, logging permission).
+2. **Hand-building container import JSON is error-prone.** Surfaced during a real client's tag-vendor migration (May 2026): a repeated `edit → jq/python build → import → fix-validation-error` loop, with recurring gotchas (`PARAM_TABLE`→`LIST` shape, self-contained trigger refs, `parentFolderId` integrity, logging permission).
 
 This project builds a CLI + skill that nails (1) first (read-only analysis), then layers (2) on as a fast follow (authoring/validation).
 
@@ -110,7 +110,7 @@ Conventions (from `cadmium`): every command accepts `--json` and is parsed by th
 
 ## v2 authoring layer (fast follow — not v1)
 
-Generate + validate GTM container **import JSON**, directly attacking the Rokt-migration pain — surfaced via a `gallium push` command (the write-back complement to `pull`). The recurring gotchas become **named validators**:
+Generate + validate GTM container **import JSON**, directly attacking the tag-vendor-migration pain — surfaced via a `gallium push` command (the write-back complement to `pull`). The recurring gotchas become **named validators**:
 
 - `PARAM_TABLE` → `LIST` parameter shape
 - self-contained trigger references
