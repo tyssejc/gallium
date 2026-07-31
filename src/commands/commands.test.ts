@@ -8,7 +8,7 @@ import { saveState } from "../config/state.ts";
 import { statePath } from "../paths.ts";
 import { cmdRefs } from "./refs.ts";
 import { cmdShow } from "./entity.ts";
-import { cmdDirty } from "./diff.ts";
+import { cmdDiff, cmdDirty } from "./diff.ts";
 import { cmdContainerAdd, cmdContainerUse, cmdContainerPull, cmdContainerShow } from "./container.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
 
@@ -118,4 +118,25 @@ test("cmdDirty includes both pending changes and paused tags", async () => {
   const rows = JSON.parse(logs.join("\n"));
   expect(rows.some((r: any) => r.id === "10" && r.change_status === "updated")).toBe(true);
   expect(rows.some((r: any) => r.id === "20" && r.change_status === "paused")).toBe(true);
+});
+
+test("cmdDiff without --against still reads the API-derived changes table", async () => {
+  const db = await openDb("acme/web");
+  setMeta(db, "last_pulled_at", "2026-06-19T00:00:00Z");
+  recordChange(db, "tag", "10", "GA4 Event", "updated");
+  await saveState(statePath(), { default_container: "acme/web" });
+  expect(await cmdDiff([], { json: true })).toBe(0);
+  expect(JSON.parse(logs.join("\n"))).toEqual([
+    { change_status: "updated", kind: "tag", name: "GA4 Event", id: "10" },
+  ]);
+});
+
+test("cmdDiff on a version ref without --against errors instead of printing nothing", async () => {
+  await saveState(statePath(), { default_container: "acme/web" });
+  await expect(cmdDiff([], { json: true, container: "acme/web@v42" })).rejects.toThrow(/--against/);
+});
+
+test("cmdDiff rejects an invalid --against target before touching the network", async () => {
+  await saveState(statePath(), { default_container: "acme/web" });
+  await expect(cmdDiff([], { json: true, against: "nonsense" })).rejects.toThrow(/Valid forms/);
 });

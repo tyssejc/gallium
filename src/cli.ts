@@ -45,6 +45,7 @@ const OPTIONS = {
   status: { type: "string" },
   container: { type: "string", short: "c" },
   limit: { type: "string" },
+  against: { type: "string" },
 } as const;
 
 export async function run(argv: string[]): Promise<number> {
