@@ -11,14 +11,14 @@ import { cmdCodeSearch } from "./commands/code.ts";
 import { cmdDiff, cmdDirty } from "./commands/diff.ts";
 import { cmdListEntities } from "./commands/list.ts";
 import { cmdSkillInstall, cmdSkillPath } from "./commands/skill.ts";
-import { cmdEnvironments, cmdVersions } from "./commands/versionInfo.ts";
+import { cmdEnvironments, cmdVersions, cmdVersion } from "./commands/versionInfo.ts";
 import { VERSION } from "./version.ts";
 
 // Flat verb table for single-word commands; noun→verb for grouped ones.
 const FLAT: Record<string, Cmd> = {
   login: cmdLogin, refs: cmdRefs, tag: cmdTag, trigger: cmdTrigger, show: cmdShow, diff: cmdDiff, dirty: cmdDirty, list: cmdListEntities,
   accounts: cmdAccounts, containers: cmdContainers, workspaces: cmdWorkspaces,
-  environments: cmdEnvironments, versions: cmdVersions,
+  environments: cmdEnvironments, versions: cmdVersions, version: cmdVersion,
 };
 const GROUPED: Record<string, Record<string, Cmd>> = {
   container: { init: cmdContainerInit, use: cmdContainerUse, show: cmdContainerShow,

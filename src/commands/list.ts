@@ -1,5 +1,5 @@
 import type { Cmd } from "../command.ts";
-import { resolveAlias, openPulled } from "./_shared.ts";
+import { openTarget } from "./_shared.ts";
 import { listEntities, unusedVariables } from "../cache/repo.ts";
 import { format } from "../output.ts";
 
@@ -12,7 +12,7 @@ export const cmdListEntities: Cmd = async (positionals, flags) => {
   const kindArg = positionals[0];
   const kind = KINDS[kindArg ?? ""];
   if (!kind) throw new Error(`usage: gallium list <${Object.keys(KINDS).join("|")}> [filters]`);
-  const db = await openPulled(await resolveAlias(flags));
+  const db = await openTarget(flags);
   if (flags.unused && kind !== "variable") {
     console.error("note: --unused only applies to 'list variables'; ignoring");
   }

@@ -9,7 +9,7 @@ import { statePath } from "../paths.ts";
 import { cmdRefs } from "./refs.ts";
 import { cmdShow } from "./entity.ts";
 import { cmdDirty } from "./diff.ts";
-import { cmdContainerAdd } from "./container.ts";
+import { cmdContainerAdd, cmdContainerUse, cmdContainerPull, cmdContainerShow } from "./container.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
 
 let dir: string;
@@ -89,6 +89,17 @@ test("cmdContainerAdd rejects duplicate alias", async () => {
 
   await cmdContainerAdd(["acme/web", "111", "222", "3"], {});
   await expect(cmdContainerAdd(["acme/web", "111", "222", "3"], {})).rejects.toThrow(/already exists/);
+});
+
+test("container commands reject a snapshot ref instead of silently ignoring it", async () => {
+  const cfgDir = join(dir, "gallium");
+  mkdirSync(cfgDir, { recursive: true });
+  await Bun.write(join(cfgDir, "config.toml"), `[oauth]\nclient_id = "id"\nclient_secret = "s"\n`);
+  await cmdContainerAdd(["acme/web", "111", "222", "3"], {});
+
+  await expect(cmdContainerUse(["acme/web@v42"], {})).rejects.toThrow(/not a snapshot|snapshot ref/i);
+  await expect(cmdContainerPull(["acme/web@live"], {})).rejects.toThrow(/not a snapshot|snapshot ref/i);
+  await expect(cmdContainerShow([], { container: "acme/web@v42" })).rejects.toThrow(/not a snapshot|snapshot ref/i);
 });
 
 test("cmdDirty includes both pending changes and paused tags", async () => {

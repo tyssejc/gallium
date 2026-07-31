@@ -20,3 +20,10 @@ test("environments and versions are registered commands", async () => {
   expect(out).toContain("environments");
   expect(out).toContain("versions");
 });
+
+test("--version still prints the CLI version despite the 'version' command", async () => {
+  const orig = console.log; let out = "";
+  console.log = (s: string) => { out = s; };
+  try { expect(await run(["--version"])).toBe(0); } finally { console.log = orig; }
+  expect(out).toMatch(/^\d+\.\d+\.\d+/);
+});

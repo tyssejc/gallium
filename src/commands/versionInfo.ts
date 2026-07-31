@@ -2,10 +2,12 @@ import type { Cmd } from "../command.ts";
 import type { GtmEnvironment, GtmVersionHeader } from "../gtm/types.ts";
 import { configPath } from "../paths.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
-import { parseContainerRef } from "../config/ref.ts";
+import { parseContainerRef, parseAgainst, describeSnapshot } from "../config/ref.ts";
 import { getUserToken } from "../auth/token.ts";
 import { GtmClient } from "../gtm/client.ts";
 import { resolveAlias } from "./_shared.ts";
+import { openSnapshot, snapshotDbPath } from "./_snapshot.ts";
+import { listEntities } from "../cache/repo.ts";
 import { format } from "../output.ts";
 
 const ENV_COLUMNS = ["name", "type", "environment_id", "version_id", "version_name"];
@@ -74,5 +76,28 @@ export const cmdVersions: Cmd = async (_positionals, flags) => {
   const { r, client } = await containerAndClient(flags);
   const headers = await client.listVersionHeaders(r.accountId, r.containerId);
   console.log(format(versionRows(headers, limit), { json: !!flags.json, columns: VERSION_COLUMNS }));
+  return 0;
+};
+
+// gallium version <versionId|env:name|live|latest> [-c <ref>]
+// Prefetches a snapshot and prints what it resolved to. Analysis commands
+// auto-pull too, so this exists for explicit prefetch and for stating the
+// resolved target before answering a question.
+export const cmdVersion: Cmd = async (positionals, flags) => {
+  const target = positionals[0];
+  if (!target) throw new Error("usage: gallium version <versionId|env:name|live|latest> [-c <alias>]");
+  const snap = parseAgainst(target);
+  const { alias } = parseContainerRef(await resolveAlias(flags));
+  const { db, versionId, versionName } = await openSnapshot(alias, snap);
+  console.log(format({
+    alias,
+    resolved_from: describeSnapshot(snap),
+    version_id: versionId,
+    version_name: versionName,
+    num_tags: listEntities(db, "tag").length,
+    num_triggers: listEntities(db, "trigger").length,
+    num_variables: listEntities(db, "variable").length,
+    db_path: snapshotDbPath(alias, versionId),
+  }, { json: !!flags.json }));
   return 0;
 };
