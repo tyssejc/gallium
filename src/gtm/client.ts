@@ -1,6 +1,6 @@
 import type {
   GtmTag, GtmTrigger, GtmVariable, GtmBuiltInVariable, GtmFolder, GtmTemplate, WorkspaceStatus,
-  GtmAccount, GtmContainer, GtmWorkspace,
+  GtmAccount, GtmContainer, GtmWorkspace, GtmEnvironment, GtmVersionHeader, GtmContainerVersion,
 } from "./types.ts";
 
 const BASE = "https://tagmanager.googleapis.com/tagmanager/v2";
@@ -48,4 +48,24 @@ export class GtmClient {
   listAccounts(): Promise<GtmAccount[]> { return this.listAll("accounts", "account"); }
   listContainers(accountId: string): Promise<GtmContainer[]> { return this.listAll(`accounts/${accountId}/containers`, "container"); }
   listWorkspaces(accountId: string, containerId: string): Promise<GtmWorkspace[]> { return this.listAll(`accounts/${accountId}/containers/${containerId}/workspaces`, "workspace"); }
+
+  containerPath(accountId: string, containerId: string): string {
+    return `accounts/${accountId}/containers/${containerId}`;
+  }
+
+  listEnvironments(accountId: string, containerId: string): Promise<GtmEnvironment[]> {
+    return this.listAll(`${this.containerPath(accountId, containerId)}/environments`, "environment");
+  }
+  listVersionHeaders(accountId: string, containerId: string): Promise<GtmVersionHeader[]> {
+    return this.listAll(`${this.containerPath(accountId, containerId)}/version_headers`, "containerVersionHeader");
+  }
+  getVersion(accountId: string, containerId: string, versionId: string): Promise<GtmContainerVersion> {
+    return this.getJson(`${this.containerPath(accountId, containerId)}/versions/${versionId}`);
+  }
+  getLiveVersion(accountId: string, containerId: string): Promise<GtmContainerVersion> {
+    return this.getJson(`${this.containerPath(accountId, containerId)}/versions:live`);
+  }
+  getLatestVersionHeader(accountId: string, containerId: string): Promise<GtmVersionHeader> {
+    return this.getJson(`${this.containerPath(accountId, containerId)}/version_headers:latest`);
+  }
 }

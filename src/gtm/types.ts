@@ -35,3 +35,20 @@ export interface WorkspaceStatus {
   workspaceChange?: WorkspaceChange[];
   mergeConflict?: unknown[];
 }
+
+export interface GtmEnvironment {
+  environmentId: string; name: string; type: string;
+  containerVersionId?: string; authorizationCode?: string; workspaceId?: string;
+}
+// NOTE: ContainerVersionHeader carries no timestamp and no notes — both are
+// deliberately absent from `gallium versions` output for that reason.
+export interface GtmVersionHeader {
+  containerVersionId: string; name?: string; deleted?: boolean;
+  numMacros?: string; numRules?: string; numTags?: string;
+  numTriggers?: string; numVariables?: string;
+}
+export interface GtmContainerVersion {
+  containerVersionId: string; name?: string; notes?: string; deleted?: boolean;
+  tag?: GtmTag[]; trigger?: GtmTrigger[]; variable?: GtmVariable[];
+  builtInVariable?: GtmBuiltInVariable[]; folder?: GtmFolder[]; customTemplate?: GtmTemplate[];
+}

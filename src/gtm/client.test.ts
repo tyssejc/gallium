@@ -72,3 +72,63 @@ test("listWorkspaces follows nextPageToken across two pages", async () => {
   expect(ws.map((w) => w.workspaceId)).toEqual(["3", "4"]);
   expect(calls).toHaveLength(2);
 });
+
+test("listEnvironments hits containers/<id>/environments and extracts environment field", async () => {
+  const calls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    calls.push(url);
+    return jsonResponse({ environment: [
+      { environmentId: "1", name: "Live", type: "live", containerVersionId: "42" },
+      { environmentId: "3", name: "Dev", type: "user", containerVersionId: "41" },
+    ] });
+  }) as unknown as typeof fetch;
+  const envs = await new GtmClient("tok", fetchFn).listEnvironments("111", "222");
+  expect(calls[0]).toContain("accounts/111/containers/222/environments");
+  expect(envs.map((e) => e.name)).toEqual(["Live", "Dev"]);
+  expect(envs[1]!.containerVersionId).toBe("41");
+});
+
+test("listVersionHeaders extracts containerVersionHeader and follows nextPageToken", async () => {
+  const calls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    calls.push(url);
+    if (url.includes("pageToken=p2")) {
+      return jsonResponse({ containerVersionHeader: [{ containerVersionId: "41", name: "older" }] });
+    }
+    return jsonResponse({
+      containerVersionHeader: [{ containerVersionId: "42", name: "newest", numTags: "9" }],
+      nextPageToken: "p2",
+    });
+  }) as unknown as typeof fetch;
+  const headers = await new GtmClient("tok", fetchFn).listVersionHeaders("111", "222");
+  expect(calls[0]).toContain("accounts/111/containers/222/version_headers");
+  expect(headers.map((h) => h.containerVersionId)).toEqual(["42", "41"]);
+  expect(headers[0]!.numTags).toBe("9");
+});
+
+test("getVersion fetches a single version snapshot with its entity arrays", async () => {
+  const calls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    calls.push(url);
+    return jsonResponse({ containerVersionId: "42", name: "go-live", notes: "category pixels",
+      tag: [{ tagId: "10", name: "GA4" }], trigger: [], variable: [] });
+  }) as unknown as typeof fetch;
+  const v = await new GtmClient("tok", fetchFn).getVersion("111", "222", "42");
+  expect(calls[0]).toContain("accounts/111/containers/222/versions/42");
+  expect(v.containerVersionId).toBe("42");
+  expect(v.notes).toBe("category pixels");
+  expect(v.tag?.[0]?.tagId).toBe("10");
+});
+
+test("getLiveVersion and getLatestVersionHeader hit their special endpoints", async () => {
+  const calls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    calls.push(url);
+    return jsonResponse({ containerVersionId: "42" });
+  }) as unknown as typeof fetch;
+  const client = new GtmClient("tok", fetchFn);
+  expect((await client.getLiveVersion("111", "222")).containerVersionId).toBe("42");
+  expect((await client.getLatestVersionHeader("111", "222")).containerVersionId).toBe("42");
+  expect(calls[0]).toContain("accounts/111/containers/222/versions:live");
+  expect(calls[1]).toContain("accounts/111/containers/222/version_headers:latest");
+});
