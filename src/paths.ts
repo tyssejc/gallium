@@ -18,6 +18,9 @@ export function cacheDir(env: Env = process.env): string {
 export function cacheDbPath(alias: string, env: Env = process.env): string {
   return `${cacheDir(env)}/${alias}.db`;
 }
+export function versionDbPath(alias: string, versionId: string, env: Env = process.env): string {
+  return `${cacheDir(env)}/${alias}@v${versionId}.db`;
+}
 export function tokenCachePath(account: string, env: Env = process.env): string {
   return `${cacheDir(env)}/.tokens/${account}.json`;
 }
