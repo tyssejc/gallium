@@ -12,3 +12,11 @@ test("unknown noun returns 1", async () => {
   const orig = console.error; console.error = () => {};
   try { expect(await run(["bogus"])).toBe(1); } finally { console.error = orig; }
 });
+
+test("environments and versions are registered commands", async () => {
+  const orig = console.log; let out = "";
+  console.log = (s: string) => { out = s; };
+  try { await run(["--help"]); } finally { console.log = orig; }
+  expect(out).toContain("environments");
+  expect(out).toContain("versions");
+});
