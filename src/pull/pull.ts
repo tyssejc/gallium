@@ -1,6 +1,9 @@
 import type { Database } from "bun:sqlite";
 import type { GtmClient } from "../gtm/client.ts";
-import type { GtmParameter, GtmTag, GtmTrigger, GtmVariable } from "../gtm/types.ts";
+import type {
+  GtmParameter, GtmTag, GtmTrigger, GtmVariable,
+  GtmBuiltInVariable, GtmFolder, GtmTemplate, GtmContainerVersion,
+} from "../gtm/types.ts";
 import {
   resetDerived, upsertEntity, recordVariableRef, recordTagTrigger, recordChange, setMeta,
 } from "../cache/repo.ts";
@@ -14,10 +17,15 @@ function recordRefs(db: Database, kind: string, id: string, strings: string[]): 
   for (const ref of extractVariableRefs(strings)) recordVariableRef(db, kind, id, ref);
 }
 
-export async function pullContainer(db: Database, client: GtmClient, ws: string, nowIso: string): Promise<void> {
-  resetDerived(db);
+export interface EntitySnapshot {
+  tag?: GtmTag[]; trigger?: GtmTrigger[]; variable?: GtmVariable[];
+  builtInVariable?: GtmBuiltInVariable[]; folder?: GtmFolder[]; customTemplate?: GtmTemplate[];
+}
 
-  for (const t of (await client.listTags(ws)) as GtmTag[]) {
+// Pure ingest — no client. Workspaces and version snapshots deliver the same
+// entity arrays, so both funnel through here.
+export function ingestEntities(db: Database, snap: EntitySnapshot): void {
+  for (const t of snap.tag ?? []) {
     const strings = collectParameterStrings(t.parameter);
     upsertEntity(db, { id: t.tagId, kind: "tag", name: t.name, type: t.type, paused: !!t.paused,
       parentFolderId: t.parentFolderId ?? null, rawJson: JSON.stringify(t), searchText: buildSearchText(t.name, strings) });
@@ -26,7 +34,7 @@ export async function pullContainer(db: Database, client: GtmClient, ws: string,
     for (const trig of t.blockingTriggerId ?? []) recordTagTrigger(db, t.tagId, trig, "blocking");
   }
 
-  for (const tr of (await client.listTriggers(ws)) as GtmTrigger[]) {
+  for (const tr of snap.trigger ?? []) {
     const strings = [
       ...collectParameterStrings(tr.parameter),
       ...conditionStrings(tr.filter),
@@ -38,26 +46,40 @@ export async function pullContainer(db: Database, client: GtmClient, ws: string,
     recordRefs(db, "trigger", tr.triggerId, strings);
   }
 
-  for (const v of (await client.listVariables(ws)) as GtmVariable[]) {
+  for (const v of snap.variable ?? []) {
     const strings = collectParameterStrings(v.parameter);
     upsertEntity(db, { id: v.variableId, kind: "variable", name: v.name, type: v.type, paused: false,
       parentFolderId: v.parentFolderId ?? null, rawJson: JSON.stringify(v), searchText: buildSearchText(v.name, strings) });
     recordRefs(db, "variable", v.variableId, strings);
   }
 
-  for (const b of await client.listBuiltInVariables(ws)) {
+  for (const b of snap.builtInVariable ?? []) {
     upsertEntity(db, { id: b.type, kind: "builtin_variable", name: b.name, type: b.type, paused: false,
       parentFolderId: null, rawJson: JSON.stringify(b), searchText: buildSearchText(b.name, []) });
   }
-  for (const f of await client.listFolders(ws)) {
+  for (const f of snap.folder ?? []) {
     upsertEntity(db, { id: f.folderId, kind: "folder", name: f.name, type: null, paused: false,
       parentFolderId: null, rawJson: JSON.stringify(f), searchText: buildSearchText(f.name, []) });
   }
-  for (const tpl of await client.listTemplates(ws)) {
+  for (const tpl of snap.customTemplate ?? []) {
     const code = tpl.templateData ?? "";
     upsertEntity(db, { id: tpl.templateId, kind: "template", name: tpl.name, type: null, paused: false,
       parentFolderId: null, rawJson: JSON.stringify(tpl), searchText: buildSearchText(tpl.name, [code]) });
   }
+}
+
+export async function pullWorkspace(db: Database, client: GtmClient, ws: string, nowIso: string): Promise<void> {
+  resetDerived(db);
+  // Workspaces expose custom templates via a separate list call; versions inline
+  // them as `customTemplate`. Normalized here so ingest sees one shape.
+  ingestEntities(db, {
+    tag: await client.listTags(ws),
+    trigger: await client.listTriggers(ws),
+    variable: await client.listVariables(ws),
+    builtInVariable: await client.listBuiltInVariables(ws),
+    folder: await client.listFolders(ws),
+    customTemplate: await client.listTemplates(ws),
+  });
 
   const status = await client.getStatus(ws);
   for (const ch of status.workspaceChange ?? []) {
@@ -74,5 +96,22 @@ export async function pullContainer(db: Database, client: GtmClient, ws: string,
     recordChange(db, kind, id, (e as any).name ?? "", ch.changeStatus);
   }
 
+  setMeta(db, "source", "workspace");
   setMeta(db, "last_pulled_at", nowIso);
+}
+
+// Version snapshots are immutable: one GET, ingest, done. No status call —
+// a version has no pending changes.
+export async function pullVersion(
+  db: Database, client: GtmClient, accountId: string, containerId: string,
+  versionId: string, nowIso: string,
+): Promise<GtmContainerVersion> {
+  const version = await client.getVersion(accountId, containerId, versionId);
+  resetDerived(db);
+  ingestEntities(db, version);
+  setMeta(db, "source", "version");
+  setMeta(db, "version_id", version.containerVersionId ?? versionId);
+  setMeta(db, "version_name", version.name ?? "");
+  setMeta(db, "last_pulled_at", nowIso);
+  return version;
 }

@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { contentHash } from "../hash.ts";
 
 export interface EntityRow {
   id: string; kind: string; name: string; type: string | null;
@@ -17,12 +18,14 @@ export function resetDerived(db: Database): void {
 }
 
 export function upsertEntity(db: Database, r: EntityRow): void {
-  db.query(`INSERT INTO entities (id,kind,name,type,paused,parent_folder_id,raw_json,search_text)
-    VALUES ($id,$kind,$name,$type,$paused,$folder,$raw,$search)
+  // Derived here, not at the call site, so every writer gets a consistent hash.
+  const hash = contentHash(r.rawJson ? JSON.parse(r.rawJson) : {});
+  db.query(`INSERT INTO entities (id,kind,name,type,paused,parent_folder_id,raw_json,search_text,content_hash)
+    VALUES ($id,$kind,$name,$type,$paused,$folder,$raw,$search,$hash)
     ON CONFLICT(kind,id) DO UPDATE SET name=$name,type=$type,paused=$paused,
-      parent_folder_id=$folder,raw_json=$raw,search_text=$search`).run({
+      parent_folder_id=$folder,raw_json=$raw,search_text=$search,content_hash=$hash`).run({
     $id: r.id, $kind: r.kind, $name: r.name, $type: r.type, $paused: r.paused ? 1 : 0,
-    $folder: r.parentFolderId, $raw: r.rawJson, $search: r.searchText,
+    $folder: r.parentFolderId, $raw: r.rawJson, $search: r.searchText, $hash: hash,
   });
 }
 
@@ -91,4 +94,8 @@ export function findEntityByName(db: Database, kind: string, name: string): Enti
 
 export function findEntitiesByName(db: Database, name: string): { kind: string; id: string; name: string }[] {
   return db.query(`SELECT kind,id,name FROM entities WHERE lower(name)=lower(?) ORDER BY kind`).all(name) as any;
+}
+
+export function allEntityHashes(db: Database): { kind: string; id: string; name: string; content_hash: string }[] {
+  return db.query(`SELECT kind,id,name,content_hash FROM entities ORDER BY kind,id`).all() as any;
 }

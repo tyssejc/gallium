@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS entities (
   parent_folder_id TEXT,
   raw_json TEXT,                     -- full entity JSON
   search_text TEXT,                  -- name + parameter values + code, lowercased
+  content_hash TEXT NOT NULL DEFAULT '',   -- sha256 of raw_json minus location fields
   PRIMARY KEY (kind, id)
 );
 CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(kind);

@@ -1,10 +1,16 @@
 import { Database } from "bun:sqlite";
-import { cacheDbPath } from "../paths.ts";
+import { cacheDbPath, versionDbPath } from "../paths.ts";
 import { ensureDirFor } from "../util/fs.ts";
 import { DDL, SCHEMA_VERSION } from "./schema.ts";
 
 export async function openDb(alias: string): Promise<Database> {
   const path = cacheDbPath(alias);
+  await ensureDirFor(path);
+  return openDbAt(path);
+}
+
+export async function openVersionDb(alias: string, versionId: string): Promise<Database> {
+  const path = versionDbPath(alias, versionId);
   await ensureDirFor(path);
   return openDbAt(path);
 }

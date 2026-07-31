@@ -5,6 +5,7 @@ import {
   upsertEntity, recordVariableRef, recordTagTrigger, recordChange,
   refsToVariable, tagFiringTriggers, tagsFiringOnTrigger, grepCode,
   listEntities, unusedVariables, pendingChanges, findEntityByName, setMeta, getMeta,
+  allEntityHashes,
 } from "./repo.ts";
 
 function db(): Database { return openDbAt(":memory:"); }
@@ -59,4 +60,26 @@ test("meta round-trips and findEntityByName is case-insensitive", () => {
   expect(getMeta(d, "last_pulled_at")).toBe("2026-06-19T00:00:00Z");
   upsertEntity(d, ent({ id: "7", kind: "trigger", name: "All Pages" }));
   expect(findEntityByName(d, "trigger", "all pages")?.id).toBe("7");
+});
+
+test("upsertEntity derives content_hash from raw_json, ignoring location fields", () => {
+  const db = openDbAt(":memory:");
+  upsertEntity(db, { id: "10", kind: "tag", name: "GA4", type: "gaawe", paused: false, parentFolderId: null,
+    rawJson: JSON.stringify({ tagId: "10", name: "GA4", fingerprint: "aaa", workspaceId: "3" }), searchText: "" });
+  const fromWorkspace = allEntityHashes(db)[0]!.content_hash;
+
+  const db2 = openDbAt(":memory:");
+  upsertEntity(db2, { id: "10", kind: "tag", name: "GA4", type: "gaawe", paused: false, parentFolderId: null,
+    rawJson: JSON.stringify({ tagId: "10", name: "GA4", fingerprint: "zzz", containerVersionId: "42" }), searchText: "" });
+  expect(allEntityHashes(db2)[0]!.content_hash).toBe(fromWorkspace);
+  expect(fromWorkspace).toMatch(/^[0-9a-f]{64}$/);
+});
+
+test("allEntityHashes returns every entity kind with a stable ordering", () => {
+  const db = openDbAt(":memory:");
+  upsertEntity(db, { id: "50", kind: "trigger", name: "All Pages", type: "pageview", paused: false,
+    parentFolderId: null, rawJson: "{}", searchText: "" });
+  upsertEntity(db, { id: "10", kind: "tag", name: "GA4", type: "gaawe", paused: false,
+    parentFolderId: null, rawJson: "{}", searchText: "" });
+  expect(allEntityHashes(db).map((e) => `${e.kind}:${e.id}`)).toEqual(["tag:10", "trigger:50"]);
 });

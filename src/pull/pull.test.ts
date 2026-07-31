@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { openDbAt } from "../cache/db.ts";
-import { pullContainer } from "./pull.ts";
+import { pullWorkspace, pullVersion } from "./pull.ts";
 import { refsToVariable, tagFiringTriggers, unusedVariables, getMeta, pendingChanges, grepCode } from "../cache/repo.ts";
 
 const fakeClient = {
@@ -34,7 +34,7 @@ const fakeClient = {
 
 test("pullContainer populates entities, refs, triggers, changes, meta", async () => {
   const db = openDbAt(":memory:");
-  await pullContainer(db, fakeClient, "ws", "2026-06-19T00:00:00Z");
+  await pullWorkspace(db, fakeClient, "ws", "2026-06-19T00:00:00Z");
   expect(refsToVariable(db, "GA4 ID").map((r) => r.name)).toEqual(["GA4 Event"]);
   expect(tagFiringTriggers(db, "10")).toEqual([{ id: "50", name: "All Pages", relation: "firing" }]);
   expect(unusedVariables(db).map((v) => v.name)).toEqual(["Orphan JS"]);
@@ -46,6 +46,7 @@ test("pullContainer populates entities, refs, triggers, changes, meta", async ()
   expect(changes.map((c) => c.id)).toContain("t9");
   expect(changes.find((c) => c.id === "t9")?.kind).toBe("template");
   expect(getMeta(db, "last_pulled_at")).toBe("2026-06-19T00:00:00Z");
+  expect(getMeta(db, "source")).toBe("workspace");
 
   // Trigger filter conditions: variable refs inside condition .parameter must be extracted
   const consentRefs = refsToVariable(db, "Consent Var");
@@ -53,4 +54,30 @@ test("pullContainer populates entities, refs, triggers, changes, meta", async ()
   expect(consentRefs.map((r) => r.name)).toContain("Consent Check");
   expect(unusedVariables(db).map((v) => v.name)).not.toContain("Consent Var");
   expect(grepCode(db, "Consent Var").map((r) => r.id)).toContain("51");
+});
+
+test("pullVersion ingests a version snapshot through the same path and records version meta", async () => {
+  const versionClient = {
+    getVersion: async () => ({
+      containerVersionId: "42", name: "go-live", notes: "category pixels",
+      tag: [{ tagId: "10", name: "GA4 Event", type: "gaawe",
+        parameter: [{ type: "template", key: "measurementId", value: "{{GA4 ID}}" }],
+        firingTriggerId: ["50"] }],
+      trigger: [{ triggerId: "50", name: "All Pages", type: "pageview" }],
+      variable: [{ variableId: "v1", name: "GA4 ID", type: "c" }],
+      builtInVariable: [{ type: "pageUrl", name: "Page URL" }],
+      folder: [], customTemplate: [],
+    }),
+  } as any;
+  const db = openDbAt(":memory:");
+  const v = await pullVersion(db, versionClient, "111", "222", "42", "2026-07-30T00:00:00Z");
+  expect(v.containerVersionId).toBe("42");
+  expect(refsToVariable(db, "GA4 ID").map((r) => r.name)).toEqual(["GA4 Event"]);
+  expect(tagFiringTriggers(db, "10")).toEqual([{ id: "50", name: "All Pages", relation: "firing" }]);
+  expect(getMeta(db, "source")).toBe("version");
+  expect(getMeta(db, "version_id")).toBe("42");
+  expect(getMeta(db, "version_name")).toBe("go-live");
+  expect(getMeta(db, "last_pulled_at")).toBe("2026-07-30T00:00:00Z");
+  // A version has no pending changes.
+  expect(pendingChanges(db, {})).toEqual([]);
 });

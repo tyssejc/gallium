@@ -6,7 +6,7 @@ import { openDb } from "../cache/db.ts";
 import { getMeta } from "../cache/repo.ts";
 import { GtmClient } from "../gtm/client.ts";
 import { getUserToken } from "../auth/token.ts";
-import { pullContainer } from "../pull/pull.ts";
+import { pullWorkspace } from "../pull/pull.ts";
 import { resolveAlias } from "./_shared.ts";
 import { format } from "../output.ts";
 import { ensureDirFor } from "../util/fs.ts";
@@ -97,7 +97,7 @@ export const cmdContainerPull: Cmd = async (positionals, flags) => {
   const client = new GtmClient(token);
   const db = await openDb(alias);
   const ws = client.wsPath(r.accountId, r.containerId, r.workspaceId);
-  await pullContainer(db, client, ws, new Date().toISOString());
+  await pullWorkspace(db, client, ws, new Date().toISOString());
   console.log(`Pulled '${alias}'.`);
   return 0;
 };
