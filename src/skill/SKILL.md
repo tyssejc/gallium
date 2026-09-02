@@ -1,6 +1,6 @@
 ---
 name: gallium
-description: Use when answering read-only questions about a Google Tag Manager container — which tags fire on a trigger, what references a variable, what custom code touches a string, what's changed in the workspace vs. the live version, listing/auditing tags, triggers, and variables, or discovering accounts/containers/workspaces. Drives the `gallium` CLI.
+description: Use when answering read-only questions about a Google Tag Manager container — which tags fire on a trigger, what references a variable, what custom code touches a string, what's changed in the workspace vs. the live version, what version is published to an environment, what changed between two publishes, listing/auditing tags, triggers, and variables, or discovering accounts/containers/workspaces. Drives the `gallium` CLI.
 ---
 
 # GTM container analysis
@@ -16,12 +16,19 @@ Use the `gallium` CLI to answer read-only questions about a Google Tag Manager c
   - **Not configured yet** → discover it: `gallium accounts --json` (find the account by name) → `gallium containers <accountId> --json` (match the container by `name` or `public_id`) → `gallium workspaces <accountId> <containerId> --json` (usually "Default Workspace") → register it: `gallium container add <alias> <accountId> <containerId> <workspaceId>`.
   - **Question names no container** → fall back to the default (`gallium container status --json` shows it). If there's no default either, ask which one.
 - When you've picked a container, **state which one you're analyzing (alias + real name)** before answering, so a wrong-container mismatch surfaces immediately. Beware similarly-named containers (e.g. `www.example.com` vs `www.example.com OLD`, or per-country variants) — match the exact name/public ID.
+- When a question concerns a **version or environment** rather than the workspace, also state the
+  **environment name and the version id it resolved to** before answering (`gallium environments list --json`
+  shows both). A wrong-target mismatch — reading Dev when the user meant Live — must surface the same way a
+  wrong-container mismatch does.
 
 ### Step 2 — Make sure that container is pulled and fresh (use `-c <alias>` for the target).
 
 - `gallium container status -c <alias> --json` → if `last_pulled_at` is null, run `gallium container pull <alias>` first.
   - For OAuth, the user must run `gallium login` once (top-level, not per-container) before the first pull. One login authorizes all containers.
 - If `last_pulled_at` is stale (>~1h) or the question implies recent edits ("did someone just change…") → pull again before answering.
+- Version snapshots (`-c <alias>@v42`, `@live`, `@latest`) are **immutable and cached forever** — the
+  staleness rule above does not apply to them, and they are fetched automatically on first use. Only the
+  *workspace* needs a freshness check.
 
 ## Question → command
 
@@ -49,10 +56,31 @@ Use the `gallium` CLI to answer read-only questions about a Google Tag Manager c
 | List tags / triggers / variables / folders | `gallium list tags [--type html] [--folder ID] [--paused] --json` |
 | Variables referenced nowhere | `gallium list variables --unused --json` |
 
+### Versions & environments
+
+| User asks | Command |
+|---|---|
+| What version is published to Dev / Live? | `gallium environments list --json` |
+| What versions exist? | `gallium versions list [--limit N] --json` |
+| Details of version N (name, notes, counts) | `gallium versions show N --json` |
+| Does my workspace match what's on Dev? | `gallium diff --against env:dev --json` |
+| What changed between two publishes? | `gallium diff -c <alias>@v41 --against 42 --json` |
+| Inspect the config of a published version | any analysis command with `-c <alias>@v42` |
+
+Any container ref accepts an `@` suffix naming an immutable snapshot: `@v42`, `@live` (newest published),
+`@latest` (newest version, published or not). So `gallium list tags -c acme/web@live --json` lists the tags
+as actually published, and `gallium show 'My Tag' -c acme/web@v42` shows that tag's config in version 42.
+`--against` additionally accepts `env:<name>`.
+
 ## Interpreting results
 
 - Always pass `--json` and parse it. Lead the answer with the conclusion, not the raw list.
 - `refs` returns every entity (tag/trigger/variable) whose parameters or code contain the `{{name}}` token.
 - `tag`/`trigger` resolve the firing/blocking relationship in both directions.
 - `diff`/`dirty` come from the GTM API's own workspace status — they show entities added/updated/deleted in the working workspace relative to the live container version.
+- `diff --against` is computed **locally** by comparing entity content, not by the GTM API. An empty result
+  is a positive assurance that the two sides match. It ignores storage bookkeeping (`fingerprint`, `path`,
+  workspace/version ids) and treats everything else as content — so an unexpected `updated` row with no
+  visible difference means a field gallium doesn't model changed; use `gallium show` on both sides to see it.
+- An environment whose `version_id` reads `latest` is not pinned — it auto-tracks the newest publish.
 - See `references/gtm-concepts.md` for workspace/version/environment relationships, web vs. server containers, Zones (GTM 360), and dataLayer/gtag.js footguns.

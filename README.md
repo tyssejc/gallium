@@ -4,6 +4,10 @@ Read-only Google Tag Manager container analysis CLI. Answers questions about GTM
 
 ## Install
 
+> **Upgrading to the version-inspection release:** the local cache schema changed, so existing caches are
+> discarded on first use. Run `gallium container pull <alias>` once per container. No config or auth
+> changes are needed.
+
 ### Homebrew (recommended)
 
 ```bash
@@ -142,7 +146,9 @@ gallium container show [-c <alias>]      # show resolved config for default/sele
 
 ### Analysis commands
 
-All analysis commands operate on the local cache and make no network requests. Pass `--json` for machine-readable output.
+All analysis commands operate on the local cache. Pass `--json` for machine-readable output.
+The only network request they can make is the one-time fetch of a version snapshot named by an
+`@ref` (see below); against a plain workspace alias they make none.
 
 ```bash
 gallium refs '<Variable Name>' [--json] [-c <alias>]
@@ -174,6 +180,33 @@ gallium list variables [--unused] [--json] [-c <alias>]
 gallium list folders [--json] [-c <alias>]
 # List workspace entities. --unused shows variables referenced nowhere.
 ```
+
+### Versions & environments
+
+```bash
+gallium environments list [--json] [-c <alias>]
+# Every environment (Live, Latest, Dev, …) and the version it currently points at.
+
+gallium versions list [--limit <n>] [--json] [-c <alias>]
+# Published versions, newest first. Default limit 20.
+
+gallium versions show <versionId|env:name|live|latest> [--json] [-c <alias>]
+# Prefetch a version snapshot and print its name, entity counts, and what it resolved to.
+
+gallium diff --against <versionId|env:name|live|latest> [--json] [-c <alias>]
+# Compare against something other than live. Empty output means the two sides match.
+```
+
+Any `-c` value accepts an `@` suffix naming an immutable snapshot — `@v42`, `@live` (newest published),
+or `@latest` (newest version, published or not) — and every analysis command honours it:
+
+```bash
+gallium list tags -c acme/web@live          # the tags as actually published
+gallium show 'My Tag' -c acme/web@v42       # that tag's config in version 42
+gallium diff -c acme/web@v41 --against 42   # what changed between two publishes
+```
+
+Snapshots are fetched automatically on first use and cached permanently, since a version never changes.
 
 ### Skill install
 
@@ -230,6 +263,17 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 | List tags / triggers / variables / folders | `gallium list tags [--type html] [--folder ID] [--paused] --json` |
 | Variables referenced nowhere | `gallium list variables --unused --json` |
 
+### Versions & environments
+
+| User asks | Command |
+|---|---|
+| What version is published to Dev / Live? | `gallium environments list --json` |
+| What versions exist? | `gallium versions list [--limit N] --json` |
+| Details of version N | `gallium versions show N --json` |
+| Does my workspace match what's on Dev? | `gallium diff --against env:dev --json` |
+| What changed between two publishes? | `gallium diff -c <alias>@v41 --against 42 --json` |
+| Inspect a published version's config | any analysis command with `-c <alias>@v42` |
+
 ## Flags
 
 | Flag | Short | Description |
@@ -240,6 +284,8 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 | `--folder <id>` | | Filter by folder ID |
 | `--paused` | | Show only paused entities |
 | `--unused` | | Show only variables referenced nowhere |
+| `--against <target>` | | Diff against `<versionId>`, `env:<name>`, `live`, or `latest` |
+| `--limit <n>` | | Max rows for `gallium versions list` (default 20) |
 
 ## License
 
