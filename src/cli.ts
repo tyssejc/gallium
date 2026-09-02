@@ -5,13 +5,13 @@ import {
 } from "./commands/container.ts";
 import { cmdAccounts, cmdContainers, cmdWorkspaces } from "./commands/discover.ts";
 import { cmdLogin } from "./commands/auth.ts";
-import { cmdRefs } from "./commands/refs.ts";
-import { cmdTag, cmdTrigger, cmdShow } from "./commands/entity.ts";
+import { cmdRefs, cmdVariablesRefs } from "./commands/refs.ts";
+import { cmdTag, cmdTrigger, cmdShow, getFor, cmdTagsTriggers, cmdTriggersTags } from "./commands/entity.ts";
 import { cmdCodeSearch } from "./commands/code.ts";
 import { cmdDiff, cmdDirty } from "./commands/diff.ts";
-import { cmdListEntities } from "./commands/list.ts";
+import { cmdListEntities, listFor } from "./commands/list.ts";
 import { cmdSkillInstall, cmdSkillPath } from "./commands/skill.ts";
-import { cmdEnvironmentsList, cmdVersionsList, cmdVersionsShow } from "./commands/versionInfo.ts";
+import { cmdEnvironmentsList, cmdVersionsList, cmdVersionsGet, cmdVersionsShow } from "./commands/versionInfo.ts";
 import { VERSION } from "./version.ts";
 
 // Flat verb table for single-word commands; noun→verb for grouped ones.
@@ -24,14 +24,27 @@ const GROUPED: Record<string, Record<string, Cmd>> = {
     list: cmdContainerList, status: cmdContainerStatus, pull: cmdContainerPull, add: cmdContainerAdd },
   code: { search: cmdCodeSearch },
   environments: { list: cmdEnvironmentsList },
-  versions: { list: cmdVersionsList, show: cmdVersionsShow },
+  versions: { list: cmdVersionsList, get: cmdVersionsGet, show: cmdVersionsShow },
+  tags: { list: listFor("tag"), get: getFor("tag"), triggers: cmdTagsTriggers },
+  triggers: { list: listFor("trigger"), get: getFor("trigger"), tags: cmdTriggersTags },
+  variables: { list: listFor("variable"), get: getFor("variable"), refs: cmdVariablesRefs },
+  folders: { list: listFor("folder"), get: getFor("folder") },
   skill: { install: cmdSkillInstall, path: cmdSkillPath },
 };
 
+// Deprecated spellings still route, but are hidden so --help only ever teaches
+// the current grammar. Grouped entries are keyed "<noun> <verb>".
+const DEPRECATED = new Set([
+  "list", "tag", "trigger", "refs", "show", "versions show",
+]);
+
 function helpText(): string {
-  const lines = ["gallium <command> [args] [--json] [-c <alias>]", "", "commands:",
-    `  ${Object.keys(FLAT).join(", ")}`];
-  for (const noun of Object.keys(GROUPED)) lines.push(`  ${noun}: ${Object.keys(GROUPED[noun]!).join(", ")}`);
+  const flat = Object.keys(FLAT).filter((n) => !DEPRECATED.has(n));
+  const lines = ["gallium <command> [args] [--json] [-c <alias>]", "", "commands:", `  ${flat.join(", ")}`];
+  for (const noun of Object.keys(GROUPED)) {
+    const verbs = Object.keys(GROUPED[noun]!).filter((v) => !DEPRECATED.has(`${noun} ${v}`));
+    if (verbs.length) lines.push(`  ${noun}: ${verbs.join(", ")}`);
+  }
   return lines.join("\n");
 }
 

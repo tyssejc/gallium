@@ -48,3 +48,10 @@ export function requireWorkspaceAlias(raw: string): string {
   }
   return ref.alias;
 }
+
+// Deprecated spellings keep working so a stale installed SKILL.md and existing
+// scripts survive the upgrade. The warning goes to stderr so that stdout — and
+// therefore --json — stays exactly what the replacement would have printed.
+export function deprecated(old: string, replacement: string): void {
+  console.error(`warning: '${old}' is deprecated; use '${replacement}'`);
+}

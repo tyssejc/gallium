@@ -5,7 +5,7 @@ import { loadConfig, resolveContainer } from "../config/config.ts";
 import { parseContainerRef, parseAgainst, describeSnapshot } from "../config/ref.ts";
 import { getUserToken } from "../auth/token.ts";
 import { GtmClient } from "../gtm/client.ts";
-import { resolveAlias } from "./_shared.ts";
+import { resolveAlias, deprecated } from "./_shared.ts";
 import { openSnapshot, snapshotDbPath } from "./_snapshot.ts";
 import { listEntities } from "../cache/repo.ts";
 import { format } from "../output.ts";
@@ -79,13 +79,13 @@ export const cmdVersionsList: Cmd = async (_positionals, flags) => {
   return 0;
 };
 
-// gallium versions show <versionId|env:name|live|latest> [-c <ref>]
+// gallium versions get <versionId|env:name|live|latest> [-c <ref>]
 // Prefetches a snapshot and prints what it resolved to. Analysis commands
 // auto-pull too, so this exists for explicit prefetch and for stating the
 // resolved target before answering a question.
-export const cmdVersionsShow: Cmd = async (positionals, flags) => {
+export const cmdVersionsGet: Cmd = async (positionals, flags) => {
   const target = positionals[0];
-  if (!target) throw new Error("usage: gallium versions show <versionId|env:name|live|latest> [-c <alias>]");
+  if (!target) throw new Error("usage: gallium versions get <versionId|env:name|live|latest> [-c <alias>]");
   const snap = parseAgainst(target);
   const { alias } = parseContainerRef(await resolveAlias(flags));
   const { db, versionId, versionName } = await openSnapshot(alias, snap);
@@ -100,4 +100,11 @@ export const cmdVersionsShow: Cmd = async (positionals, flags) => {
     db_path: snapshotDbPath(alias, versionId),
   }, { json: !!flags.json }));
   return 0;
+};
+
+// Deprecated: gallium versions show <id>. Shipped in v0.2.0 and published to the
+// Homebrew tap, so it gets a warning rather than a silent rename.
+export const cmdVersionsShow: Cmd = async (positionals, flags) => {
+  deprecated("gallium versions show", "gallium versions get");
+  return cmdVersionsGet(positionals, flags);
 };
