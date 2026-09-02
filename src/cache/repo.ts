@@ -96,6 +96,10 @@ export function findEntitiesByName(db: Database, name: string): { kind: string; 
   return db.query(`SELECT kind,id,name FROM entities WHERE lower(name)=lower(?) ORDER BY kind`).all(name) as any;
 }
 
+export function countEntities(db: Database): number {
+  return (db.query(`SELECT COUNT(*) AS c FROM entities`).get() as { c: number }).c;
+}
+
 export function allEntityHashes(db: Database): { kind: string; id: string; name: string; content_hash: string }[] {
   return db.query(`SELECT kind,id,name,content_hash FROM entities ORDER BY kind,id`).all() as any;
 }

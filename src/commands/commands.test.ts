@@ -123,6 +123,9 @@ test("cmdDirty includes both pending changes and paused tags", async () => {
 test("cmdDiff without --against still reads the API-derived changes table", async () => {
   const db = await openDb("acme/web");
   setMeta(db, "last_pulled_at", "2026-06-19T00:00:00Z");
+  // A pull always ingests the entity before recording a change against it.
+  upsertEntity(db, { id: "10", kind: "tag", name: "GA4 Event", type: "gaawe",
+    paused: false, parentFolderId: null, rawJson: "{}", searchText: "" });
   recordChange(db, "tag", "10", "GA4 Event", "updated");
   await saveState(statePath(), { default_container: "acme/web" });
   expect(await cmdDiff([], { json: true })).toBe(0);

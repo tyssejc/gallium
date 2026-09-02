@@ -5,7 +5,7 @@ import type {
   GtmBuiltInVariable, GtmFolder, GtmTemplate, GtmContainerVersion,
 } from "../gtm/types.ts";
 import {
-  resetDerived, upsertEntity, recordVariableRef, recordTagTrigger, recordChange, setMeta,
+  resetDerived, upsertEntity, recordVariableRef, recordTagTrigger, recordChange, setMeta, countEntities,
 } from "../cache/repo.ts";
 import { collectParameterStrings, extractVariableRefs, buildSearchText } from "./classify.ts";
 
@@ -80,6 +80,21 @@ export async function pullWorkspace(db: Database, client: GtmClient, ws: string,
     folder: await client.listFolders(ws),
     customTemplate: await client.listTemplates(ws),
   });
+
+  // GTM answers a list call on a non-existent workspace with an empty array
+  // rather than a 404, so an empty ingest is indistinguishable from a healthy
+  // pull of an empty container. Recording it would leave every later question
+  // answering "no results" from an empty cache — a silent wrong answer, which
+  // is far worse than a false alarm on a genuinely empty container.
+  if (countEntities(db) === 0) {
+    const m = ws.match(/^accounts\/([^/]+)\/containers\/([^/]+)\/workspaces\/(.+)$/);
+    const check = m ? `\n  gallium workspaces ${m[1]} ${m[2]}` : "";
+    throw new Error(
+      `Workspace ${m?.[3] ?? ws} returned no entities; nothing was cached. ` +
+      `The configured workspace_id is probably stale or deleted — list the real ones with:${check}\n` +
+      `(If this container really is empty, there is nothing to pull.)`,
+    );
+  }
 
   const status = await client.getStatus(ws);
   for (const ch of status.workspaceChange ?? []) {

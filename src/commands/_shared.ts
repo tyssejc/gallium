@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { openDb } from "../cache/db.ts";
-import { getMeta } from "../cache/repo.ts";
+import { getMeta, countEntities } from "../cache/repo.ts";
 import { loadState } from "../config/state.ts";
 import { statePath } from "../paths.ts";
 import { parseContainerRef } from "../config/ref.ts";
@@ -10,6 +10,15 @@ export async function openPulled(alias: string): Promise<Database> {
   const db = await openDb(alias);
   if (!getMeta(db, "last_pulled_at")) {
     throw new Error(`Container '${alias}' has never been pulled. Run: gallium container pull ${alias}`);
+  }
+  // A pull recorded before the empty-ingest guard existed can leave a cache that
+  // looks pulled but holds nothing. Answering from it would be a silent "no
+  // results" to every question.
+  if (countEntities(db) === 0) {
+    throw new Error(
+      `Cache for '${alias}' records a pull but contains no entities. Re-pull it: ` +
+      `gallium container pull ${alias}`,
+    );
   }
   return db;
 }

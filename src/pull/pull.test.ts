@@ -81,3 +81,20 @@ test("pullVersion ingests a version snapshot through the same path and records v
   // A version has no pending changes.
   expect(pendingChanges(db, {})).toEqual([]);
 });
+
+// A workspace id that no longer exists returns empty lists rather than a 404,
+// so without this guard the pull "succeeds" and every later question answers
+// "no results" from an empty cache.
+test("pullWorkspace refuses to record a pull that ingested nothing", async () => {
+  const emptyClient = {
+    listTags: async () => [], listTriggers: async () => [], listVariables: async () => [],
+    listBuiltInVariables: async () => [], listFolders: async () => [], listTemplates: async () => [],
+    getStatus: async () => ({ workspaceChange: [] }),
+  } as any;
+  const db = openDbAt(":memory:");
+  const ws = "accounts/4701094143/containers/207289247/workspaces/144";
+  await expect(pullWorkspace(db, emptyClient, ws, "2026-09-02T00:00:00Z")).rejects.toThrow(
+    /returned no entities.*gallium workspaces 4701094143 207289247/s,
+  );
+  expect(getMeta(db, "last_pulled_at")).toBeNull();
+});
