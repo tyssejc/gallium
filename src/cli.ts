@@ -11,6 +11,7 @@ import { cmdCodeSearch } from "./commands/code.ts";
 import { cmdDiff, cmdDirty } from "./commands/diff.ts";
 import { cmdListEntities } from "./commands/list.ts";
 import { cmdSkillInstall, cmdSkillPath } from "./commands/skill.ts";
+import { cmdEnvironmentsList, cmdVersionsList, cmdVersionsShow } from "./commands/versionInfo.ts";
 import { VERSION } from "./version.ts";
 
 // Flat verb table for single-word commands; noun→verb for grouped ones.
@@ -22,6 +23,8 @@ const GROUPED: Record<string, Record<string, Cmd>> = {
   container: { init: cmdContainerInit, use: cmdContainerUse, show: cmdContainerShow,
     list: cmdContainerList, status: cmdContainerStatus, pull: cmdContainerPull, add: cmdContainerAdd },
   code: { search: cmdCodeSearch },
+  environments: { list: cmdEnvironmentsList },
+  versions: { list: cmdVersionsList, show: cmdVersionsShow },
   skill: { install: cmdSkillInstall, path: cmdSkillPath },
 };
 
@@ -42,6 +45,8 @@ const OPTIONS = {
   folder: { type: "string" },
   status: { type: "string" },
   container: { type: "string", short: "c" },
+  limit: { type: "string" },
+  against: { type: "string" },
 } as const;
 
 export async function run(argv: string[]): Promise<number> {

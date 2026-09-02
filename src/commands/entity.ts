@@ -1,5 +1,5 @@
 import type { Cmd } from "../command.ts";
-import { resolveAlias, openPulled } from "./_shared.ts";
+import { openTarget } from "./_shared.ts";
 import { findEntityByName, findEntitiesByName, tagFiringTriggers, tagsFiringOnTrigger } from "../cache/repo.ts";
 import { format } from "../output.ts";
 
@@ -7,7 +7,7 @@ import { format } from "../output.ts";
 export const cmdShow: Cmd = async (positionals, flags) => {
   const name = positionals.join(" ").trim();
   if (!name) throw new Error("usage: gallium show <name> [--kind tag|trigger|variable]");
-  const db = await openPulled(await resolveAlias(flags));
+  const db = await openTarget(flags);
 
   const kind = flags.kind ? String(flags.kind) : undefined;
   if (!kind) {
@@ -30,7 +30,7 @@ export const cmdShow: Cmd = async (positionals, flags) => {
 export const cmdTag: Cmd = async (positionals, flags) => {
   const name = positionals.join(" ").trim();
   if (!name) throw new Error("usage: gallium tag <name>");
-  const db = await openPulled(await resolveAlias(flags));
+  const db = await openTarget(flags);
   const tag = findEntityByName(db, "tag", name);
   if (!tag) throw new Error(`No tag named '${name}'`);
   const rows = tagFiringTriggers(db, tag.id);
@@ -42,7 +42,7 @@ export const cmdTag: Cmd = async (positionals, flags) => {
 export const cmdTrigger: Cmd = async (positionals, flags) => {
   const name = positionals.join(" ").trim();
   if (!name) throw new Error("usage: gallium trigger <name> [--refs]");
-  const db = await openPulled(await resolveAlias(flags));
+  const db = await openTarget(flags);
   const trig = findEntityByName(db, "trigger", name);
   if (!trig) throw new Error(`No trigger named '${name}'`);
   const rows = tagsFiringOnTrigger(db, trig.id);

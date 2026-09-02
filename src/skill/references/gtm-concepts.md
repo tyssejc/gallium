@@ -1,11 +1,25 @@
 # GTM concepts (for gallium)
 
 ## Workspaces, versions, environments
+
 - A **container** holds tags, triggers, variables, folders, built-in variables, and custom templates.
-- A **workspace** is the editable working copy. `gallium` pulls the configured workspace.
-- A **version** is an immutable snapshot created on publish. The **live** version is what's serving.
-- `diff`/`dirty` reflect the workspace's pending changes vs. its base version, via the API's workspace status.
-- **Environments** (e.g. Live, Latest, custom) point at versions; not modeled in gallium v1.
+- A **workspace** is the mutable, per-user editing area. Changes live here until published. `gallium` pulls
+  the configured workspace, and `gallium diff` with no arguments shows what it has that live doesn't.
+- A **version** is an immutable numbered snapshot created by publishing. It never changes once created,
+  which is why gallium caches version snapshots forever with no freshness check.
+- An **environment** is a *named pointer* at a version, with its own snippet/auth code. `Live` points at the
+  published production version; `Latest` auto-tracks the newest version; user-defined ones (Dev, Staging)
+  point wherever they were last published to.
+- `diff`/`dirty` with no `--against` reflect the workspace's pending changes vs. its base version, via the
+  API's own workspace status.
+
+The consequence that matters: **"published" is ambiguous.** Work can be published to a Dev environment
+without being live in production. A workspace can therefore show changes as pending relative to *live*
+while being byte-identical to what's deployed on *Dev*. `gallium diff --against env:dev` is what settles
+it; `gallium diff` alone cannot.
+
+Pinning: `@v42` is fixed forever. `@live` and `@latest` re-resolve on every invocation and will follow a
+new publish.
 
 ## Web vs. server containers
 - gallium v1 targets **web** containers (tags/triggers/variables).

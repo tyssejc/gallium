@@ -6,8 +6,8 @@ import { openDb } from "../cache/db.ts";
 import { getMeta } from "../cache/repo.ts";
 import { GtmClient } from "../gtm/client.ts";
 import { getUserToken } from "../auth/token.ts";
-import { pullContainer } from "../pull/pull.ts";
-import { resolveAlias } from "./_shared.ts";
+import { pullWorkspace } from "../pull/pull.ts";
+import { resolveAlias, requireWorkspaceAlias } from "./_shared.ts";
 import { format } from "../output.ts";
 import { ensureDirFor } from "../util/fs.ts";
 
@@ -36,8 +36,8 @@ export const cmdContainerInit: Cmd = async () => {
 };
 
 export const cmdContainerUse: Cmd = async (positionals) => {
-  const alias = positionals[0];
-  if (!alias) throw new Error("usage: gallium container use <alias>");
+  if (!positionals[0]) throw new Error("usage: gallium container use <alias>");
+  const alias = requireWorkspaceAlias(positionals[0]);
   const cfg = await loadConfig(configPath());
   resolveContainer(cfg, alias); // validates
   const sp = statePath();
@@ -56,7 +56,7 @@ export const cmdContainerList: Cmd = async (_p, flags) => {
 };
 
 export const cmdContainerShow: Cmd = async (_p, flags) => {
-  const alias = await resolveAlias(flags);
+  const alias = requireWorkspaceAlias(await resolveAlias(flags));
   const cfg = await loadConfig(configPath());
   const r = resolveContainer(cfg, alias);
   console.log(format({ alias: r.alias, accountId: r.accountId,
@@ -65,7 +65,7 @@ export const cmdContainerShow: Cmd = async (_p, flags) => {
 };
 
 export const cmdContainerStatus: Cmd = async (_p, flags) => {
-  const alias = await resolveAlias(flags);
+  const alias = requireWorkspaceAlias(await resolveAlias(flags));
   const cfg = await loadConfig(configPath());
   resolveContainer(cfg, alias);
   const db = await openDb(alias);
@@ -78,6 +78,7 @@ export const cmdContainerAdd: Cmd = async (positionals) => {
   const [alias, accountId, containerId, workspaceId] = positionals;
   if (!alias || !accountId || !containerId || !workspaceId)
     throw new Error("usage: gallium container add <alias> <accountId> <containerId> <workspaceId>");
+  requireWorkspaceAlias(alias);
   const path = configPath();
   const file = Bun.file(path);
   if (!(await file.exists())) throw new Error(`No config at ${path}. Run 'gallium container init' first.`);
@@ -90,14 +91,14 @@ export const cmdContainerAdd: Cmd = async (positionals) => {
 };
 
 export const cmdContainerPull: Cmd = async (positionals, flags) => {
-  const alias = positionals[0] ?? await resolveAlias(flags);
+  const alias = requireWorkspaceAlias(positionals[0] ?? await resolveAlias(flags));
   const cfg = await loadConfig(configPath());
   const r = resolveContainer(cfg, alias);
   const token = await getUserToken(cfg);
   const client = new GtmClient(token);
   const db = await openDb(alias);
   const ws = client.wsPath(r.accountId, r.containerId, r.workspaceId);
-  await pullContainer(db, client, ws, new Date().toISOString());
+  await pullWorkspace(db, client, ws, new Date().toISOString());
   console.log(`Pulled '${alias}'.`);
   return 0;
 };
