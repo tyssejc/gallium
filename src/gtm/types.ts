@@ -41,7 +41,7 @@ export interface GtmEnvironment {
   containerVersionId?: string; authorizationCode?: string; workspaceId?: string;
 }
 // NOTE: ContainerVersionHeader carries no timestamp and no notes — both are
-// deliberately absent from `gallium versions` output for that reason.
+// deliberately absent from `gallium versions list` output for that reason.
 export interface GtmVersionHeader {
   containerVersionId: string; name?: string; deleted?: boolean;
   numMacros?: string; numRules?: string; numTags?: string;

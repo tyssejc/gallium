@@ -56,8 +56,8 @@ async function containerAndClient(flags: Record<string, unknown>) {
   return { r, client: new GtmClient(await getUserToken(cfg)) };
 }
 
-// gallium environments [-c <ref>]
-export const cmdEnvironments: Cmd = async (_positionals, flags) => {
+// gallium environments list [-c <ref>]
+export const cmdEnvironmentsList: Cmd = async (_positionals, flags) => {
   const { r, client } = await containerAndClient(flags);
   const [envs, headers] = await Promise.all([
     client.listEnvironments(r.accountId, r.containerId),
@@ -67,8 +67,8 @@ export const cmdEnvironments: Cmd = async (_positionals, flags) => {
   return 0;
 };
 
-// gallium versions [-c <ref>] [--limit N]
-export const cmdVersions: Cmd = async (_positionals, flags) => {
+// gallium versions list [-c <ref>] [--limit N]
+export const cmdVersionsList: Cmd = async (_positionals, flags) => {
   const limit = flags.limit === undefined ? DEFAULT_LIMIT : Number(flags.limit);
   if (!Number.isInteger(limit) || limit < 1) {
     throw new Error(`--limit must be a positive integer; got '${flags.limit}'`);
@@ -79,13 +79,13 @@ export const cmdVersions: Cmd = async (_positionals, flags) => {
   return 0;
 };
 
-// gallium version <versionId|env:name|live|latest> [-c <ref>]
+// gallium versions show <versionId|env:name|live|latest> [-c <ref>]
 // Prefetches a snapshot and prints what it resolved to. Analysis commands
 // auto-pull too, so this exists for explicit prefetch and for stating the
 // resolved target before answering a question.
-export const cmdVersion: Cmd = async (positionals, flags) => {
+export const cmdVersionsShow: Cmd = async (positionals, flags) => {
   const target = positionals[0];
-  if (!target) throw new Error("usage: gallium version <versionId|env:name|live|latest> [-c <alias>]");
+  if (!target) throw new Error("usage: gallium versions show <versionId|env:name|live|latest> [-c <alias>]");
   const snap = parseAgainst(target);
   const { alias } = parseContainerRef(await resolveAlias(flags));
   const { db, versionId, versionName } = await openSnapshot(alias, snap);
