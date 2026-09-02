@@ -4,9 +4,10 @@ Read-only Google Tag Manager container analysis CLI. Answers questions about GTM
 
 ## Install
 
-> **Upgrading to the version-inspection release:** the local cache schema changed, so existing caches are
-> discarded on first use. Run `gallium container pull <alias>` once per container. No config or auth
-> changes are needed.
+> **Upgrading from v0.1.x:** the local cache schema changed, so existing caches are discarded on first
+> use — run `gallium container pull <alias>` once per container. Entity commands also moved to noun groups
+> (`gallium tags list`, not `gallium list tags`); the old spellings still work but warn. See
+> [Deprecated commands](#deprecated-commands). Re-run `gallium skill install` to refresh the Claude skill.
 
 ### Homebrew (recommended)
 
@@ -151,18 +152,26 @@ The only network request they can make is the one-time fetch of a version snapsh
 `@ref` (see below); against a plain workspace alias they make none.
 
 ```bash
-gallium refs '<Variable Name>' [--json] [-c <alias>]
+gallium tags list [--type html] [--folder <ID>] [--paused] [--json] [-c <alias>]
+gallium triggers list [--json] [-c <alias>]
+gallium variables list [--unused] [--json] [-c <alias>]
+gallium folders list [--json] [-c <alias>]
+# List workspace entities. --unused shows variables referenced nowhere.
+
+gallium tags get '<Tag Name>' [--json] [-c <alias>]
+gallium triggers get '<Trigger Name>' [--json] [-c <alias>]
+gallium variables get '<Variable Name>' [--json] [-c <alias>]
+# The entity's full raw JSON — every parameter, mapping, and setting. The noun
+# carries the kind, so a name shared by a tag and a variable is unambiguous.
+
+gallium variables refs '<Variable Name>' [--json] [-c <alias>]
 # Every tag/trigger/variable whose parameters or custom code reference {{Variable Name}}.
 
-gallium tag '<Tag Name>' [--json] [-c <alias>]
-# The tag's details plus which triggers fire it and which block it.
+gallium tags triggers '<Tag Name>' [--json] [-c <alias>]
+# Which triggers fire the tag and which block it.
 
-gallium trigger '<Trigger Name>' [--json] [-c <alias>]
-# The trigger's details plus which tags it fires and which it blocks.
-
-gallium show '<Name>' [--kind tag|trigger|variable] [--json] [-c <alias>]
-# The entity's full raw JSON — every parameter, mapping, and setting.
-# --kind disambiguates when a tag/trigger/variable share a name.
+gallium triggers tags '<Trigger Name>' [--json] [-c <alias>]
+# Which tags the trigger fires and which it blocks.
 
 gallium code search '<pattern>' [--json] [-c <alias>]
 # Full-text search across all custom HTML, custom JS, and template fields.
@@ -174,11 +183,6 @@ gallium diff [--json] [-c <alias>]
 gallium dirty [--json] [-c <alias>]
 # Edited-but-unpublished and/or paused entities in the working workspace.
 
-gallium list tags [--type html] [--folder <ID>] [--paused] [--json] [-c <alias>]
-gallium list triggers [--json] [-c <alias>]
-gallium list variables [--unused] [--json] [-c <alias>]
-gallium list folders [--json] [-c <alias>]
-# List workspace entities. --unused shows variables referenced nowhere.
 ```
 
 ### Versions & environments
@@ -190,7 +194,7 @@ gallium environments list [--json] [-c <alias>]
 gallium versions list [--limit <n>] [--json] [-c <alias>]
 # Published versions, newest first. Default limit 20.
 
-gallium versions show <versionId|env:name|live|latest> [--json] [-c <alias>]
+gallium versions get <versionId|env:name|live|latest> [--json] [-c <alias>]
 # Prefetch a version snapshot and print its name, entity counts, and what it resolved to.
 
 gallium diff --against <versionId|env:name|live|latest> [--json] [-c <alias>]
@@ -201,8 +205,8 @@ Any `-c` value accepts an `@` suffix naming an immutable snapshot — `@v42`, `@
 or `@latest` (newest version, published or not) — and every analysis command honours it:
 
 ```bash
-gallium list tags -c acme/web@live          # the tags as actually published
-gallium show 'My Tag' -c acme/web@v42       # that tag's config in version 42
+gallium tags list -c acme/web@live          # the tags as actually published
+gallium tags get 'My Tag' -c acme/web@v42   # that tag's config in version 42
 gallium diff -c acme/web@v41 --against 42   # what changed between two publishes
 ```
 
@@ -253,15 +257,15 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 
 | User asks | Command |
 |---|---|
-| What references `{{Variable Z}}`? | `gallium refs 'Variable Z' --json` |
-| What triggers does tag Y fire on? | `gallium tag 'Y' --json` |
-| What tags fire on trigger T? | `gallium trigger 'T' --json` |
-| Full config of tag/trigger/variable X | `gallium show 'X' [--kind tag\|trigger\|variable] --json` |
+| What references `{{Variable Z}}`? | `gallium variables refs 'Variable Z' --json` |
+| What triggers does tag Y fire on? | `gallium tags triggers 'Y' --json` |
+| What tags fire on trigger T? | `gallium triggers tags 'T' --json` |
+| Full config of tag/trigger/variable X | `gallium tags get 'X' --json` |
 | Find custom code touching `dataLayer.foo` | `gallium code search 'dataLayer.foo' --json` |
 | What changed vs. the live version? | `gallium diff --json` |
 | Anything edited-but-unpublished / paused? | `gallium dirty --json` |
-| List tags / triggers / variables / folders | `gallium list tags [--type html] [--folder ID] [--paused] --json` |
-| Variables referenced nowhere | `gallium list variables --unused --json` |
+| List tags / triggers / variables / folders | `gallium tags list [--type html] [--folder ID] [--paused] --json` |
+| Variables referenced nowhere | `gallium variables list --unused --json` |
 
 ### Versions & environments
 
@@ -269,7 +273,7 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 |---|---|
 | What version is published to Dev / Live? | `gallium environments list --json` |
 | What versions exist? | `gallium versions list [--limit N] --json` |
-| Details of version N | `gallium versions show N --json` |
+| Details of version N | `gallium versions get N --json` |
 | Does my workspace match what's on Dev? | `gallium diff --against env:dev --json` |
 | What changed between two publishes? | `gallium diff -c <alias>@v41 --against 42 --json` |
 | Inspect a published version's config | any analysis command with `-c <alias>@v42` |
@@ -286,6 +290,23 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 | `--unused` | | Show only variables referenced nowhere |
 | `--against <target>` | | Diff against `<versionId>`, `env:<name>`, `live`, or `latest` |
 | `--limit <n>` | | Max rows for `gallium versions list` (default 20) |
+
+## Deprecated commands
+
+The pre-v0.3.0 spellings still work and still print the same thing on stdout, but warn on stderr and no
+longer appear in `--help`. They will be removed in a future release.
+
+| Deprecated | Use |
+|---|---|
+| `gallium list <kind>` | `gallium <kind> list` |
+| `gallium show 'X' [--kind K]` | `gallium <K>s get 'X'` |
+| `gallium tag 'X'` | `gallium tags triggers 'X'` |
+| `gallium trigger 'X'` | `gallium triggers tags 'X'` |
+| `gallium refs 'X'` | `gallium variables refs 'X'` |
+| `gallium versions show <id>` | `gallium versions get <id>` |
+
+The warning goes to stderr, so `--json` output stays parseable while you migrate. If you see one coming
+from Claude Code, the installed skill is stale — refresh it with `gallium skill install`.
 
 ## License
 

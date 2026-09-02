@@ -46,15 +46,20 @@ Use the `gallium` CLI to answer read-only questions about a Google Tag Manager c
 
 | User asks | Command |
 |---|---|
-| What references `{{Variable Z}}`? | `gallium refs 'Variable Z' --json` |
-| What triggers does tag Y fire on? | `gallium tag 'Y' --json` |
-| What tags fire on trigger T? | `gallium trigger 'T' --json` |
-| Full config of tag/trigger/variable X (params, mappings) | `gallium show 'X' [--kind tag\|trigger\|variable] --json` |
+| What references `{{Variable Z}}`? | `gallium variables refs 'Variable Z' --json` |
+| What triggers does tag Y fire on? | `gallium tags triggers 'Y' --json` |
+| What tags fire on trigger T? | `gallium triggers tags 'T' --json` |
+| Full config of tag X (params, mappings) | `gallium tags get 'X' --json` |
+| Full config of a trigger / variable / folder | `gallium triggers get 'X'`, `gallium variables get 'X'`, `gallium folders get 'X'` |
 | Find custom code touching `dataLayer.foo` | `gallium code search 'dataLayer.foo' --json` |
 | What changed vs. the live version? | `gallium diff --json` |
 | Anything edited-but-unpublished / paused? | `gallium dirty --json` |
-| List tags / triggers / variables / folders | `gallium list tags [--type html] [--folder ID] [--paused] --json` |
-| Variables referenced nowhere | `gallium list variables --unused --json` |
+| List tags / triggers / variables / folders | `gallium tags list [--type html] [--folder ID] [--paused] --json` |
+| Variables referenced nowhere | `gallium variables list --unused --json` |
+
+Every entity noun takes the same shape: `gallium <tags|triggers|variables|folders> <list|get> [name]`, plus a
+relation verb where one exists (`tags triggers`, `triggers tags`, `variables refs`). The noun carries the
+kind, so `gallium tags get 'X'` is never ambiguous even when a tag and a variable share a name.
 
 ### Versions & environments
 
@@ -62,21 +67,24 @@ Use the `gallium` CLI to answer read-only questions about a Google Tag Manager c
 |---|---|
 | What version is published to Dev / Live? | `gallium environments list --json` |
 | What versions exist? | `gallium versions list [--limit N] --json` |
-| Details of version N (name, notes, counts) | `gallium versions show N --json` |
+| Details of version N (name, notes, counts) | `gallium versions get N --json` |
 | Does my workspace match what's on Dev? | `gallium diff --against env:dev --json` |
 | What changed between two publishes? | `gallium diff -c <alias>@v41 --against 42 --json` |
 | Inspect the config of a published version | any analysis command with `-c <alias>@v42` |
 
 Any container ref accepts an `@` suffix naming an immutable snapshot: `@v42`, `@live` (newest published),
-`@latest` (newest version, published or not). So `gallium list tags -c acme/web@live --json` lists the tags
-as actually published, and `gallium show 'My Tag' -c acme/web@v42` shows that tag's config in version 42.
+`@latest` (newest version, published or not). So `gallium tags list -c acme/web@live --json` lists the tags
+as actually published, and `gallium tags get 'My Tag' -c acme/web@v42` shows that tag's config in version 42.
 `--against` additionally accepts `env:<name>`.
 
 ## Interpreting results
 
 - Always pass `--json` and parse it. Lead the answer with the conclusion, not the raw list.
-- `refs` returns every entity (tag/trigger/variable) whose parameters or code contain the `{{name}}` token.
-- `tag`/`trigger` resolve the firing/blocking relationship in both directions.
+- `variables refs` returns every entity (tag/trigger/variable) whose parameters or code contain the `{{name}}` token.
+- `tags triggers` / `triggers tags` resolve the firing/blocking relationship in both directions.
+- The pre-v0.3.0 spellings (`list <kind>`, `tag`, `trigger`, `refs`, `show`) still work but print a
+  deprecation warning to stderr. Use the noun-group form above; if you see that warning in output, the
+  installed skill is stale and should be refreshed with `gallium skill install`.
 - `diff`/`dirty` come from the GTM API's own workspace status — they show entities added/updated/deleted in the working workspace relative to the live container version.
 - `diff --against` is computed **locally** by comparing entity content, not by the GTM API. An empty result
   is a positive assurance that the two sides match. It ignores storage bookkeeping (`fingerprint`, `path`,
