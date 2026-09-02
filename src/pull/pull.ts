@@ -127,6 +127,8 @@ export async function pullVersion(
   setMeta(db, "source", "version");
   setMeta(db, "version_id", version.containerVersionId ?? versionId);
   setMeta(db, "version_name", version.name ?? "");
+  setMeta(db, "version_description", version.description ?? "");
+  setMeta(db, "version_fingerprint", version.fingerprint ?? "");
   setMeta(db, "last_pulled_at", nowIso);
   return version;
 }

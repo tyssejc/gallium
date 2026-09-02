@@ -40,15 +40,21 @@ export interface GtmEnvironment {
   environmentId: string; name: string; type: string;
   containerVersionId?: string; authorizationCode?: string; workspaceId?: string;
 }
-// NOTE: ContainerVersionHeader carries no timestamp and no notes — both are
-// deliberately absent from `gallium versions list` output for that reason.
+// NOTE: ContainerVersionHeader carries neither `fingerprint` nor `description`,
+// so `gallium versions list` cannot date or describe rows without a full
+// `versions.get` per row — which is what `--dates` opts into.
 export interface GtmVersionHeader {
   containerVersionId: string; name?: string; deleted?: boolean;
   numMacros?: string; numRules?: string; numTags?: string;
   numTriggers?: string; numVariables?: string;
 }
 export interface GtmContainerVersion {
-  containerVersionId: string; name?: string; notes?: string; deleted?: boolean;
+  // The API calls this `description`, not `notes` — `notes` is an entity-level
+  // field. Typing it wrong meant it silently never populated.
+  containerVersionId: string; name?: string; description?: string; deleted?: boolean;
+  // Epoch millis, recomputed on every write to the version, so it is creation
+  // (or last-modification) time — not necessarily publish time.
+  fingerprint?: string;
   tag?: GtmTag[]; trigger?: GtmTrigger[]; variable?: GtmVariable[];
   builtInVariable?: GtmBuiltInVariable[]; folder?: GtmFolder[]; customTemplate?: GtmTemplate[];
 }

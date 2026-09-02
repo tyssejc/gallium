@@ -12,6 +12,7 @@ import { format } from "../output.ts";
 
 const ENV_COLUMNS = ["name", "type", "environment_id", "version_id", "version_name"];
 const VERSION_COLUMNS = ["version_id", "name", "deleted", "num_tags", "num_triggers", "num_variables"];
+const DATED_COLUMNS = ["version_id", "created_at", "name", "deleted", "num_tags", "num_triggers", "num_variables"];
 const DEFAULT_LIMIT = 20;
 
 export interface EnvironmentRow {
@@ -34,6 +35,21 @@ export function environmentRows(envs: GtmEnvironment[], headers: GtmVersionHeade
       version_name: pinned ? (nameById.get(pinned) ?? "") : "(tracks newest publish)",
     };
   });
+}
+
+// GTM stores `fingerprint` as epoch millis. It is recomputed on every write to
+// the version, so it dates creation or last modification — renaming an old
+// version moves it. Deliberately surfaced as `created_at`, never `published_at`.
+export function fingerprintToIso(fingerprint?: string): string {
+  const ms = Number(fingerprint);
+  if (!fingerprint || !Number.isFinite(ms) || ms <= 0) return "";
+  return new Date(ms).toISOString();
+}
+
+export function attachDates(
+  rows: VersionRow[], fingerprintById: Map<string, string>,
+): (VersionRow & { created_at: string })[] {
+  return rows.map((r) => ({ ...r, created_at: fingerprintToIso(fingerprintById.get(r.version_id)) }));
 }
 
 export function versionRows(headers: GtmVersionHeader[], limit: number): VersionRow[] {
@@ -75,7 +91,22 @@ export const cmdVersionsList: Cmd = async (_positionals, flags) => {
   }
   const { r, client } = await containerAndClient(flags);
   const headers = await client.listVersionHeaders(r.accountId, r.containerId);
-  console.log(format(versionRows(headers, limit), { json: !!flags.json, columns: VERSION_COLUMNS }));
+  const rows = versionRows(headers, limit);
+
+  if (!flags.dates) {
+    console.log(format(rows, { json: !!flags.json, columns: VERSION_COLUMNS }));
+    return 0;
+  }
+  // Version *headers* carry no fingerprint, so dating a listing costs one full
+  // versions.get per row — each downloading that version's entire entity set.
+  // Hence opt-in, and hence the warning.
+  console.error(`# fetching ${rows.length} full version records to date them; this is slower than a plain listing`);
+  const fingerprintById = new Map<string, string>();
+  for (const row of rows) {
+    const v = await client.getVersion(r.accountId, r.containerId, row.version_id);
+    if (v.fingerprint) fingerprintById.set(row.version_id, v.fingerprint);
+  }
+  console.log(format(attachDates(rows, fingerprintById), { json: !!flags.json, columns: DATED_COLUMNS }));
   return 0;
 };
 
@@ -88,12 +119,15 @@ export const cmdVersionsGet: Cmd = async (positionals, flags) => {
   if (!target) throw new Error("usage: gallium versions get <versionId|env:name|live|latest> [-c <alias>]");
   const snap = parseAgainst(target);
   const { alias } = parseContainerRef(await resolveAlias(flags));
-  const { db, versionId, versionName } = await openSnapshot(alias, snap);
+  const snapshot = await openSnapshot(alias, snap);
+  const { db, versionId, versionName } = snapshot;
   console.log(format({
     alias,
     resolved_from: describeSnapshot(snap),
     version_id: versionId,
     version_name: versionName,
+    description: snapshot.versionDescription,
+    created_at: fingerprintToIso(snapshot.versionFingerprint),
     num_tags: listEntities(db, "tag").length,
     num_triggers: listEntities(db, "trigger").length,
     num_variables: listEntities(db, "variable").length,

@@ -59,6 +59,7 @@ const OPTIONS = {
   status: { type: "string" },
   container: { type: "string", short: "c" },
   limit: { type: "string" },
+  dates: { type: "boolean", default: false },
   against: { type: "string" },
 } as const;
 

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { environmentRows, versionRows } from "./versionInfo.ts";
+import { environmentRows, versionRows, fingerprintToIso, attachDates } from "./versionInfo.ts";
 
 test("environmentRows joins each environment to the name of the version it points at", () => {
   const rows = environmentRows(
@@ -54,4 +54,21 @@ test("versionRows fills missing optional header fields with empty strings", () =
   expect(versionRows([{ containerVersionId: "1" }], 10)[0]).toEqual({
     version_id: "1", name: "", deleted: false, num_tags: "", num_triggers: "", num_variables: "",
   });
+});
+
+test("fingerprintToIso decodes GTM's epoch-millis fingerprint", () => {
+  expect(fingerprintToIso("1787666891824")).toBe("2026-08-25T14:08:11.824Z");
+});
+
+test("fingerprintToIso yields empty string for anything unusable", () => {
+  for (const bad of [undefined, "", "0", "not-a-number", "-5"]) {
+    expect(fingerprintToIso(bad)).toBe("");
+  }
+});
+
+test("attachDates adds created_at per version id, blank where unknown", () => {
+  const rows = versionRows([{ containerVersionId: "42" }, { containerVersionId: "41" }], 10);
+  const dated = attachDates(rows, new Map([["42", "1787666891824"]]));
+  expect(dated[0]).toMatchObject({ version_id: "42", created_at: "2026-08-25T14:08:11.824Z" });
+  expect(dated[1]).toMatchObject({ version_id: "41", created_at: "" });
 });

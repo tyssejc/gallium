@@ -67,7 +67,8 @@ kind, so `gallium tags get 'X'` is never ambiguous even when a tag and a variabl
 |---|---|
 | What version is published to Dev / Live? | `gallium environments list --json` |
 | What versions exist? | `gallium versions list [--limit N] --json` |
-| Details of version N (name, notes, counts) | `gallium versions get N --json` |
+| When was each version created? | `gallium versions list --dates --json` |
+| Details of version N (name, description, date, counts) | `gallium versions get N --json` |
 | Does my workspace match what's on Dev? | `gallium diff --against env:dev --json` |
 | What changed between two publishes? | `gallium diff -c <alias>@v41 --against 42 --json` |
 | Inspect the config of a published version | any analysis command with `-c <alias>@v42` |
@@ -91,4 +92,11 @@ as actually published, and `gallium tags get 'My Tag' -c acme/web@v42` shows tha
   workspace/version ids) and treats everything else as content — so an unexpected `updated` row with no
   visible difference means a field gallium doesn't model changed; use `gallium show` on both sides to see it.
 - An environment whose `version_id` reads `latest` is not pinned — it auto-tracks the newest publish.
+- A version's `description` is the publisher's own note about *why* the version exists — quote it before
+  inferring intent from the diff. It is available from `versions get`, never from `versions list`, because
+  the API's header resource omits it.
+- `created_at` is derived from the version's `fingerprint`, which GTM recomputes on every write to that
+  version. It dates creation or last modification, **not** publication — an old version renamed last week
+  will read as last week. To find what is actually deployed somewhere, use `gallium environments list`.
+  `versions list --dates` costs one full version fetch per row, so pass `--limit`.
 - See `references/gtm-concepts.md` for workspace/version/environment relationships, web vs. server containers, Zones (GTM 360), and dataLayer/gtag.js footguns.

@@ -47,6 +47,7 @@ export async function resolveSnapshotVersionId(
 
 export interface OpenedSnapshot {
   db: Database; versionId: string; versionName: string;
+  versionDescription: string; versionFingerprint: string;
 }
 
 // Versions are immutable, so a cached snapshot is never stale and is pulled at
@@ -58,10 +59,19 @@ export async function openSnapshot(alias: string, snap: SnapshotRef): Promise<Op
   const versionId = await resolveSnapshotVersionId(client, r.accountId, r.containerId, snap);
 
   const db = await openVersionDb(alias, versionId);
-  if (!getMeta(db, "last_pulled_at")) {
+  // `version_description` is absent (not merely empty) on snapshots cached before
+  // it was recorded. Backfilling once beats reporting "no description" for a
+  // version that has one — the schema bump that would also fix it costs every
+  // container a full re-pull.
+  if (!getMeta(db, "last_pulled_at") || getMeta(db, "version_description") === null) {
     await pullVersion(db, client, r.accountId, r.containerId, versionId, new Date().toISOString());
   }
-  return { db, versionId, versionName: getMeta(db, "version_name") ?? "" };
+  return {
+    db, versionId,
+    versionName: getMeta(db, "version_name") ?? "",
+    versionDescription: getMeta(db, "version_description") ?? "",
+    versionFingerprint: getMeta(db, "version_fingerprint") ?? "",
+  };
 }
 
 export function snapshotDbPath(alias: string, versionId: string): string {

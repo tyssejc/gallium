@@ -191,11 +191,13 @@ gallium dirty [--json] [-c <alias>]
 gallium environments list [--json] [-c <alias>]
 # Every environment (Live, Latest, Dev, …) and the version it currently points at.
 
-gallium versions list [--limit <n>] [--json] [-c <alias>]
+gallium versions list [--limit <n>] [--dates] [--json] [-c <alias>]
 # Published versions, newest first. Default limit 20.
+# --dates adds created_at, at the cost of one full version fetch per row.
 
 gallium versions get <versionId|env:name|live|latest> [--json] [-c <alias>]
-# Prefetch a version snapshot and print its name, entity counts, and what it resolved to.
+# Prefetch a version snapshot and print its name, description, creation date,
+# entity counts, and what it resolved to.
 
 gallium diff --against <versionId|env:name|live|latest> [--json] [-c <alias>]
 # Compare against something other than live. Empty output means the two sides match.
@@ -211,6 +213,10 @@ gallium diff -c acme/web@v41 --against 42   # what changed between two publishes
 ```
 
 Snapshots are fetched automatically on first use and cached permanently, since a version never changes.
+
+`created_at` comes from the version's `fingerprint`, which GTM recomputes whenever the version is written.
+It therefore dates creation or last modification, not publication — renaming an old version moves its date.
+For what is actually deployed to an environment, use `gallium environments list`.
 
 ### Skill install
 
@@ -274,6 +280,7 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 | What version is published to Dev / Live? | `gallium environments list --json` |
 | What versions exist? | `gallium versions list [--limit N] --json` |
 | Details of version N | `gallium versions get N --json` |
+| When was each version created? | `gallium versions list --dates --json` |
 | Does my workspace match what's on Dev? | `gallium diff --against env:dev --json` |
 | What changed between two publishes? | `gallium diff -c <alias>@v41 --against 42 --json` |
 | Inspect a published version's config | any analysis command with `-c <alias>@v42` |
@@ -290,6 +297,7 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 | `--unused` | | Show only variables referenced nowhere |
 | `--against <target>` | | Diff against `<versionId>`, `env:<name>`, `live`, or `latest` |
 | `--limit <n>` | | Max rows for `gallium versions list` (default 20) |
+| `--dates` | | Add `created_at` to `gallium versions list` (one fetch per row) |
 
 ## Deprecated commands
 
