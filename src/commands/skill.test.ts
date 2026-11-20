@@ -1,5 +1,5 @@
 import { test, expect, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { cmdSkillInstall } from "./skill.ts";
@@ -35,4 +35,11 @@ test("skill install works from a compiled binary with no source tree", async () 
   expect(run.exitCode).toBe(0);
   expect(existsSync(join(dir, "skills", "gallium", "SKILL.md"))).toBe(true);
   expect(existsSync(join(dir, "skills", "gallium", "references", "gtm-concepts.md"))).toBe(true);
+});
+
+test("the skill documents writes and is no longer read-only", () => {
+  const text = readFileSync(resolve(import.meta.dir, "../skill/SKILL.md"), "utf8");
+  const description = text.match(/^description: (.*)$/m)?.[1] ?? "";
+  expect(description).not.toContain("read-only");
+  for (const phrase of ["gallium apply", "login --write", "cannot publish"]) expect(text).toContain(phrase);
 });

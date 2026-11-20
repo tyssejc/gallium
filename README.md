@@ -1,6 +1,6 @@
 # gallium
 
-Read-only Google Tag Manager container analysis CLI. Answers questions about GTM workspaces — what tags fire on a trigger, what references a variable, what custom code touches a string, what changed vs. the live version — without modifying anything.
+Google Tag Manager container analysis CLI. Answers questions about GTM workspaces — what tags fire on a trigger, what references a variable, what custom code touches a string, what changed vs. the live version. It reads by default; it can also edit a workspace through `gallium apply` (see [Writing](#writing)), and it can never publish.
 
 ## Install
 
@@ -218,6 +218,15 @@ Snapshots are fetched automatically on first use and cached permanently, since a
 It therefore dates creation or last modification, not publication — renaming an old version moves its date.
 For what is actually deployed to an environment, use `gallium environments list`.
 
+### Writes
+
+```bash
+gallium login --write                    # OAuth with the edit scope (opt-in)
+gallium apply <spec.json> -c <alias> --workspace <name|new:Title> [--commit] [--json]
+```
+
+See [Writing](#writing).
+
 ### Skill install
 
 ```bash
@@ -226,6 +235,20 @@ gallium skill path      # print the install directory path
 ```
 
 Installs the `gallium` Claude skill into `~/.claude/skills/gallium/` (respects `$CLAUDE_CONFIG_DIR`). This lets Claude Code use `gallium` to answer GTM questions automatically.
+
+## Writing
+
+Writing is opt-in. A plain `gallium login` is read-only; `gallium login --write` additionally requests the `tagmanager.edit.containers` scope. Service-account auth never writes.
+
+```bash
+gallium login --write
+gallium apply spec.json -c acme/web --workspace "new:GPC signal"            # dry run: prints the plan, sends nothing
+gallium apply spec.json -c acme/web --workspace "new:GPC signal" --commit   # applies it
+```
+
+`spec.json` is a JSON array of tag, trigger, variable and folder entries to create, patch or delete. `-c` and `--workspace` are mandatory; gallium never falls back to the default container or workspace. `new:<Title>` creates a workspace (or reuses one with that title). After `--commit` gallium re-reads the workspace and confirms every change landed.
+
+Gallium never publishes, creates versions or previews: that stays a human step in the GTM UI, so every write is discardable with its workspace. Every request is paced to 20 per 100 s across invocations. The spec format, validation rules and scope caveats are in the [design](docs/superpowers/specs/2026-11-20-write-ops-design.md) and in the skill (`src/skill/SKILL.md`).
 
 ## Discovering containers
 
@@ -298,6 +321,9 @@ From there, `gallium container use acme/web` and `gallium container pull acme/we
 | `--against <target>` | | Diff against `<versionId>`, `env:<name>`, `live`, or `latest` |
 | `--limit <n>` | | Max rows for `gallium versions list` (default 20) |
 | `--dates` | | Add `created_at` to `gallium versions list` (one fetch per row) |
+| `--write` | | With `gallium login`: also request the edit scope |
+| `--workspace <name\|new:Title>` | | Target workspace for `gallium apply` (required) |
+| `--commit` | | Apply the plan; without it `gallium apply` is a dry run |
 
 ## Deprecated commands
 

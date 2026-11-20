@@ -1,11 +1,11 @@
 ---
 name: gallium
-description: Use when answering read-only questions about a Google Tag Manager container — which tags fire on a trigger, what references a variable, what custom code touches a string, what's changed in the workspace vs. the live version, what version is published to an environment, what changed between two publishes, listing/auditing tags, triggers, and variables, or discovering accounts/containers/workspaces. Drives the `gallium` CLI.
+description: Use when answering questions about a Google Tag Manager container — which tags fire on a trigger, what references a variable, what custom code touches a string, what's changed in the workspace vs. the live version, what version is published to an environment, what changed between two publishes, listing/auditing tags, triggers, and variables, or discovering accounts/containers/workspaces — or when creating or editing tags, triggers, variables and folders in a named workspace (never publishing). Drives the `gallium` CLI.
 ---
 
 # GTM container analysis
 
-Use the `gallium` CLI to answer read-only questions about a Google Tag Manager container workspace. Users refer to a container by alias (e.g. `acme/web`) **or** by its real name — a domain (`www.example.com`), a public ID (`GTM-XXXXXX`), or an account/brand ("the Pitman Training container").
+Use the `gallium` CLI to answer questions about a Google Tag Manager container workspace. It reads by default; it writes only through `gallium apply` (see Writes). Users refer to a container by alias (e.g. `acme/web`) **or** by its real name — a domain (`www.example.com`), a public ID (`GTM-XXXXXX`), or an account/brand ("the Pitman Training container").
 
 ## Preflight (always)
 
@@ -78,8 +78,88 @@ Any container ref accepts an `@` suffix naming an immutable snapshot: `@v42`, `@
 as actually published, and `gallium tags get 'My Tag' -c acme/web@v42` shows that tag's config in version 42.
 `--against` additionally accepts `env:<name>`.
 
+## Writes
+
+Follow these in order.
+
+1. **Gallium cannot publish, create versions or preview.** It only edits a workspace. The user previews and publishes in the GTM UI. Never tell the user a change is live.
+2. **Writing needs a one-time `gallium login --write`, which the user runs themselves** (it opens a browser). A plain `gallium login` is read-only and `apply --commit` refuses with it. Service-account auth can never write. Do not run the login for them.
+3. **Always dry-run first and show the user the plan before `--commit`.** `gallium apply <spec.json> -c <alias> --workspace <name|new:Title>` sends nothing and prints one line per entity (`CREATE`, `UPDATE` with the fields that change, `DELETE`, `UNCHANGED`). Its first line is `Target: <alias> — workspace "<name>" (<id>)`, or `(will be created)` for a `new:` workspace; read that line back to the user, with the plan, before `--commit`. Add `--json` for the full request bodies (`container` and `workspace` name the target there). Only after the user approves the plan, run the same command with `--commit`.
+4. **`--workspace` is mandatory, and so is `-c <alias>`** (no default container, no `@` refs). Use `new:<Title>` to put a change set in its own workspace: it is created on `--commit`, and an existing workspace with that exact title is reused, so a re-run converges. A plain name must match an existing workspace exactly. The alias's pinned workspace is ignored. Never use "Default Workspace" unless the user said to.
+5. **The spec is a JSON array of entries.** Each has `kind` (`tag`, `trigger`, `variable` or `folder`) and `name`.
+
+   | Entry | Meaning |
+   |---|---|
+   | name not in the workspace, with `type` (folders need none) | create with the given fields |
+   | name already in the workspace | patch: each top-level field you give replaces that field; everything else is kept |
+   | `"delete": true` (nothing else in the entry) | delete |
+
+   Any other field is a GTM API field, passed through as written. Helper fields are resolved from names to ids when the plan is built, and a name may refer to an entity created in the same spec:
+
+   - `firingTriggers`, `blockingTriggers` (tags only): set the whole list, by trigger name.
+   - `addFiringTriggers`, `removeFiringTriggers`, `addBlockingTriggers`, `removeBlockingTriggers` (tags only): edit the list. Adding one that is already there is a no-op.
+   - The built-in triggers `All Pages`, `Initialization - All Pages` and `Consent Initialization - All Pages` can be referenced by name in any of the trigger-list fields above, though they cannot be created, renamed or deleted.
+   - `folder`: a folder name, resolved to `parentFolderId`.
+   - `rename`: the new name of an existing entity.
+   - `valueFile` in place of `value` on any parameter: a path relative to the spec file, whose contents become the value. Use it for Custom HTML and Custom JS so code is not escaped into JSON.
+
+   Worked example: a custom-event blocking trigger, added as a blocking trigger to two existing tags.
+
+   ```json
+   [
+     {
+       "kind": "trigger",
+       "name": "Block - GPC Enabled",
+       "type": "customEvent",
+       "customEventFilter": [
+         { "type": "matchRegex", "parameter": [
+           { "type": "template", "key": "arg0", "value": "{{_event}}" },
+           { "type": "template", "key": "arg1", "value": ".*" }
+         ] }
+       ],
+       "filter": [
+         { "type": "equals", "parameter": [
+           { "type": "template", "key": "arg0", "value": "{{JS - GPC Enabled}}" },
+           { "type": "template", "key": "arg1", "value": "true" }
+         ] }
+       ]
+     },
+     { "kind": "tag", "name": "GA4 - Purchase", "addBlockingTriggers": ["Block - GPC Enabled"] },
+     { "kind": "tag", "name": "Ads - Remarketing", "addBlockingTriggers": ["Block - GPC Enabled"] }
+   ]
+   ```
+
+   Custom HTML tag whose code lives in a file next to the spec (`banner.html`):
+
+   ```json
+   {
+     "kind": "tag", "name": "HTML - Consent Banner", "type": "html",
+     "parameter": [
+       { "type": "template", "key": "html", "valueFile": "banner.html" },
+       { "type": "boolean", "key": "supportDocumentWrite", "value": "false" }
+     ],
+     "firingTriggers": ["All Pages"]
+   }
+   ```
+
+   Rules the planner enforces. Any violation fails the whole dry-run with every problem listed, before anything is written:
+
+   - Every trigger, folder and `{{variable}}` reference must resolve, in the workspace, in the spec, or among the enabled built-in variables. A name matching more than one entity is an error.
+   - Entity names match case-insensitively, but `{{variable}}` references are case-sensitive and must use the variable's exact name.
+   - Renaming a variable or tag is refused while anything still references the old name (GTM does not rewrite references). Update the referrers first, in a separate apply.
+   - A name that the same spec deletes cannot be reused in that spec. Delete first, then create in a second apply.
+   - Deleting is refused while anything outside the spec's own deletes still references the target.
+   - A patch that changes nothing is reported `UNCHANGED` and sends no request.
+   - Order of writes: folders, variables, triggers, tags; then deletes in the reverse order.
+   - Removing a trigger (`removeFiringTriggers`, `removeBlockingTriggers`) that matches nothing is an error, unless the same spec deletes a trigger of that name.
+   - GTM has no transaction. On the first failed write gallium stops and prints what was applied (`FAILED`, then `NOT APPLIED` for the rest). Fix the cause and re-run the same spec; it converges. If it reports the entity changed since it was read, just re-run.
+6. **A commit is slow: allow for it.** Pacing makes a commit of N entities take roughly N × 5 seconds plus setup, so run `apply --commit` with a 10-minute command timeout. Each write prints its line to stderr as it lands, and a long pacing pause prints `gallium: pacing — waiting <N>s …`; stdout carries only the final report. If the command is interrupted, re-run the same command: it converges and reports what is already applied as `UNCHANGED`.
+7. **After a commit, give the user the workspace URL** gallium prints, and verify with `gallium diff`. `diff` reads the alias's pinned workspace, which is usually not the one you wrote to, so register the written workspace under a new alias first (the workspace id is in the URL and the `APPLIED` line): `gallium container add <alias>-<title> <accountId> <containerId> <workspaceId>`, then `gallium container pull <alias>-<title>` and `gallium diff -c <alias>-<title> --json`. Report the result and tell the user the change is not published. Gallium also re-reads the workspace itself after a commit: `NOT VERIFIED` lines mean a planned change is missing, and `VERIFY FAILED` means the re-read errored. Treat either as a failed apply and say so.
+8. Caveat: `The write scope also covers the environments API. Gallium has no command for it; do not call it by other means.`
+
 ## Interpreting results
 
+- Every request gallium makes is paced to 20 per 100 s, shared across invocations. A long pause is pacing, not a hang (gallium prints a `pacing — waiting` line on stderr when it happens); do not kill it or retry. For `apply --commit` see Writes, item 6. Quota errors are retried automatically.
 - Always pass `--json` and parse it. Lead the answer with the conclusion, not the raw list.
 - `variables refs` returns every entity (tag/trigger/variable) whose parameters or code contain the `{{name}}` token.
 - `tags triggers` / `triggers tags` resolve the firing/blocking relationship in both directions.
