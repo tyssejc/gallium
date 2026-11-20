@@ -8,6 +8,13 @@ import { isQuotaError, type Pacer } from "./pace.ts";
 const BASE = "https://tagmanager.googleapis.com/tagmanager/v2";
 const MAX_ATTEMPTS = 5;
 
+// The only paths a non-GET may target: the workspaces collection (create) and
+// a workspace's tags, triggers, variables and folders. Ids are numeric only, so
+// custom verbs (`:publish`, `:create_version`, `:quick_preview`, `:sync`), dot
+// segments that fetch would collapse (`..`, `%2e%2e`) and every version or
+// environment path are refused whatever method calls request().
+const WRITABLE = /^accounts\/[0-9]+\/containers\/[0-9]+\/workspaces(\/[0-9]+\/(tags|triggers|variables|folders)(\/[0-9]+)?)?$/;
+
 export interface GtmClientOpts {
   pacer?: Pacer;
   sleep?: (ms: number) => Promise<void>;
@@ -36,6 +43,9 @@ export class GtmClient {
     path: string,
     opts: { query?: Record<string, string>; body?: unknown } = {},
   ): Promise<any> {
+    if (method !== "GET" && !WRITABLE.test(path)) {
+      throw new Error(`gallium refuses to send ${method} ${path}: only workspace and entity writes are allowed`);
+    }
     const qs = new URLSearchParams(opts.query ?? {}).toString();
     const url = `${BASE}/${path}${qs ? `?${qs}` : ""}`;
     const headers: Record<string, string> = this.headers();

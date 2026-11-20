@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { GtmClient } from "./client.ts";
+import type { WriteKind } from "./types.ts";
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -238,10 +239,70 @@ test("deleteEntity sends DELETE and tolerates an empty 204 body", async () => {
   expect(seen[0]!.url.endsWith("/workspaces/3/folders/4")).toBe(true);
 });
 
-test("the client has no publish, version or environment write path", async () => {
+// Exposes the protected request() so a test can try to send what no public method sends.
+class RawClient extends GtmClient {
+  raw(method: "GET" | "POST" | "PUT" | "DELETE", path: string) { return this.request(method, path, { body: method === "GET" ? undefined : {} }); }
+}
+
+function counting() {
+  const urls: string[] = [];
+  const fetchFn = (async (url: string) => { urls.push(url); return jsonResponse({}); }) as unknown as typeof fetch;
+  let acquires = 0;
+  const pacer = { acquire: async () => { acquires++; } };
+  return { urls, acquires: () => acquires, client: new RawClient("tok", fetchFn, { pacer }) };
+}
+
+test("request() refuses publish, version, environment and other non-workspace writes before pacing or fetch", async () => {
+  const { urls, acquires, client } = counting();
+  const refused: ["POST" | "PUT" | "DELETE", string][] = [
+    ["POST", "accounts/1/containers/2/versions/3:publish"],
+    ["POST", "accounts/1/containers/2/workspaces/4:create_version"],
+    ["POST", "accounts/1/containers/2/workspaces/4:quick_preview"],
+    ["POST", "accounts/1/containers/2/workspaces/4:sync"],
+    ["PUT", "accounts/1/containers/2/environments/5"],
+    ["DELETE", "accounts/1/containers/2/versions/3"],
+    ["POST", "accounts/1/containers/2/workspaces/4/tags/7:revert"],
+    ["DELETE", "accounts/1/containers/2/workspaces/4/templates/8"],
+    ["DELETE", "accounts/1/containers/2/workspaces/3/tags/.."],
+    ["DELETE", "accounts/1/containers/2/workspaces/../tags/.."],
+    ["PUT", "accounts/1/containers/2/workspaces/3/tags/%2e%2e"],
+  ];
+  for (const [method, path] of refused) {
+    await expect(client.raw(method, path))
+      .rejects.toThrow(`gallium refuses to send ${method} ${path}: only workspace and entity writes are allowed`);
+  }
+  expect(urls).toEqual([]);
+  expect(acquires()).toBe(0);
+});
+
+test("entity writes with a forced non-entity kind are refused without a fetch", async () => {
+  const { urls, client } = counting();
+  const ws = "accounts/1/containers/2/workspaces/3";
+  const kind = "environment" as unknown as WriteKind;
+  await expect(client.createEntity(ws, kind, { name: "x" })).rejects.toThrow("gallium refuses to send POST");
+  await expect(client.updateEntity(ws, kind, "5", { name: "x" })).rejects.toThrow("gallium refuses to send PUT");
+  await expect(client.deleteEntity(ws, kind, "5")).rejects.toThrow("gallium refuses to send DELETE");
+  expect(urls).toEqual([]);
+});
+
+test("the four legitimate writes, and reads of versions and environments, still go through", async () => {
+  const { urls, client } = counting();
+  const ws = "accounts/1/containers/2/workspaces/3";
+  await client.createWorkspace("1", "2", "X");
+  for (const kind of ["tag", "trigger", "variable", "folder"] as WriteKind[]) {
+    await client.createEntity(ws, kind, { name: "x" });
+    await client.updateEntity(ws, kind, "5", { name: "x" }, "f");
+    await client.deleteEntity(ws, kind, "5");
+  }
+  await client.raw("GET", "accounts/1/containers/2/versions/3");
+  await client.raw("GET", "accounts/1/containers/2/environments");
+  await client.raw("GET", "accounts/1/containers/2/version_headers");
+  await client.getLiveVersion("1", "2");
+  expect(urls.length).toBe(1 + 12 + 4);
+});
+
+test("fetchFn is called from exactly one place in the client", async () => {
   const src = await Bun.file(new URL("./client.ts", import.meta.url)).text();
-  expect(src).not.toMatch(/:publish|create_version|quick_preview|:set_latest|reauthorize/);
-  const writes = [...src.matchAll(/request\(\s*"(POST|PUT|DELETE)"[^)]*\)/g)].map((m) => m[0]);
-  for (const w of writes) expect(w).not.toMatch(/environments|versions/);
-  expect(writes.length).toBe(4);
+  expect(src.match(/this\.fetchFn\(/g)?.length).toBe(1);
+  expect(src.match(/\bfetch\(/g)).toBeNull();
 });

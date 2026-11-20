@@ -171,6 +171,7 @@ test("dry run sends only GET requests and does not check write scope", async () 
   expect(gtm.requests.length).toBeGreaterThan(0);
   expect(gtm.writes()).toEqual([]);
   expect(out).toEqual([
+    'Target: acme/web — workspace "Default Workspace" (1)',
     "DRY RUN — nothing sent. Re-run with --commit to apply.",
     'CREATE trigger "Block - GPC Enabled"',
     'UPDATE tag "GA4 - Purchase" (blockingTriggerId)',
@@ -216,6 +217,7 @@ test("commit with new:Title creates the workspace, applies, and verifies", async
   // Verification re-lists the workspace after the writes.
   expect(gtm.requests.at(-1)).toBe(`GET ${CONTAINER}/workspaces/50/templates`);
   expect(out).toEqual([
+    'Target: acme/web — workspace "GPC signal" (50)',
     'APPLIED to workspace "GPC signal" (50)',
     'CREATE trigger "Block - GPC Enabled"',
     'UPDATE tag "GA4 - Purchase" (blockingTriggerId)',
@@ -244,6 +246,7 @@ test("a mid-apply 409 reports applied and not-applied and exits 1", async () => 
     `PUT ${CONTAINER}/workspaces/1/tags/10?fingerprint=f10`,
   ]);
   expect(out).toEqual([
+    'Target: acme/web — workspace "Default Workspace" (1)',
     'CREATE trigger "Block - GPC Enabled"',
     `FAILED UPDATE tag "GA4 - Purchase" (blockingTriggerId): GTM PUT ${CONTAINER}/workspaces/1/tags/10 failed (409): ${body}`,
     'NOT APPLIED UPDATE tag "GA4 - Add To Cart" (blockingTriggerId)',
@@ -272,6 +275,7 @@ test("a second commit of the same spec is all UNCHANGED and sends no writes", as
   expect(await runApply(args({ commit: true }), { client: gtm.client, container, assertWriteAllowed: allowed })).toBe(0);
   expect(gtm.writes().length).toBe(before);
   expect(out).toEqual([
+    'Target: acme/web — workspace "Default Workspace" (1)',
     'APPLIED to workspace "Default Workspace" (1)',
     'UNCHANGED trigger "Block - GPC Enabled"',
     'UNCHANGED tag "GA4 - Purchase"',
@@ -286,6 +290,7 @@ test("a write that does not show up on re-read is reported NOT VERIFIED and exit
   const code = await runApply(args({ commit: true }), { client: gtm.client, container, assertWriteAllowed: allowed });
   expect(code).toBe(1);
   expect(out).toEqual([
+    'Target: acme/web — workspace "Default Workspace" (1)',
     'APPLIED to workspace "Default Workspace" (1)',
     'CREATE trigger "Block - GPC Enabled"',
     'UPDATE tag "GA4 - Purchase" (blockingTriggerId)',
@@ -309,6 +314,7 @@ test("a failed verification read still reports the applied writes and the worksp
   expect(code).toBe(1);
   expect(gtm.writes().length).toBe(3);
   expect(out).toEqual([
+    'Target: acme/web — workspace "Default Workspace" (1)',
     'APPLIED to workspace "Default Workspace" (1)',
     'CREATE trigger "Block - GPC Enabled"',
     'UPDATE tag "GA4 - Purchase" (blockingTriggerId)',
@@ -323,6 +329,7 @@ test("a failed verification read still reports the applied writes and the worksp
   expect(await runApply(args({ commit: true, json: true }), { client: json.client, container, assertWriteAllowed: allowed })).toBe(1);
   const res = JSON.parse(out.join("\n"));
   expect(res.workspace).toEqual({ name: "Default Workspace", id: "1", url: `${UI}/1` });
+  expect(res.container).toBe("acme/web");
   expect(res.error).toBe(`GTM GET ${CONTAINER}/workspaces/1/tags failed (500): down`);
 });
 
@@ -332,6 +339,7 @@ test("a new:Title commit whose first read fails still prints the created workspa
   expect(code).toBe(1);
   expect(gtm.writes()).toEqual([`POST ${CONTAINER}/workspaces`]);
   expect(out).toEqual([
+    'Target: acme/web — workspace "GPC signal" (50)',
     'CREATED workspace "GPC signal" (50); no entity writes were sent.',
     `FAILED: GTM GET ${CONTAINER}/workspaces/50/tags failed (500): down`,
     `${UI}/50`,
@@ -386,6 +394,7 @@ test("--json prints the workspace, the ops with full request bodies, and failure
   expect(await runApply(args({ commit: true, json: true }), { client: gtm.client, container, assertWriteAllowed: allowed })).toBe(1);
   const res = JSON.parse(out.join("\n"));
   expect(res.workspace).toEqual({ name: "Default Workspace", id: "1", url: `${UI}/1` });
+  expect(res.container).toBe("acme/web");
   expect(res.committed).toBe(true);
   expect(res.ops.map((o: any) => o.action)).toEqual(["create", "update", "update"]);
   expect(res.ops[0].body).toEqual({ name: "Block - GPC Enabled", type: "customEvent" });
@@ -394,4 +403,46 @@ test("--json prints the workspace, the ops with full request bodies, and failure
   expect(res.failed.error).toContain("(412): stale");
   expect(res.pending.map((o: any) => o.name)).toEqual(["GA4 - Add To Cart"]);
   expect(res.unverified).toBeUndefined();
+});
+
+test("the Target line names the alias and workspace: existing, and new before creation", async () => {
+  const gtm = fakeGtm();
+  expect(await runApply(args({ workspace: "new:GPC signal" }), { client: gtm.client, container, assertWriteAllowed: allowed })).toBe(0);
+  expect(out[0]).toBe('Target: acme/web — workspace "GPC signal" (will be created)');
+  expect(out[1]).toBe("DRY RUN — nothing sent. Re-run with --commit to apply.");
+
+  out.length = 0;
+  expect(await runApply(args({ workspace: "new:GPC signal", json: true }), { client: fakeGtm().client, container, assertWriteAllowed: allowed })).toBe(0);
+  const res = JSON.parse(out.join("\n"));
+  expect(res.container).toBe("acme/web");
+  expect(res.workspace).toEqual({ name: "GPC signal", id: null });
+
+  out.length = 0;
+  expect(await runApply(args({ workspace: "Default Workspace" }), { client: fakeGtm().client, container, assertWriteAllowed: allowed })).toBe(0);
+  expect(out[0]).toBe('Target: acme/web — workspace "Default Workspace" (1)');
+
+  out.length = 0;
+  expect(await runApply(args({ json: true }), { client: fakeGtm().client, container, assertWriteAllowed: allowed })).toBe(0);
+  const existing = JSON.parse(out.join("\n"));
+  expect(existing.container).toBe("acme/web");
+  expect(existing.workspace).toEqual({ name: "Default Workspace", id: "1", url: `${UI}/1` });
+});
+
+test("a commit prints each op to stderr as it lands, and stdout stays the report", async () => {
+  const body = '{"error":{"code":409,"message":"Fingerprint mismatch"}}';
+  const fail: Fail = (method, path) => (method === "PUT" && path.endsWith("/tags/11") ? { status: 409, body } : undefined);
+  const progress = [
+    'CREATE trigger "Block - GPC Enabled"',
+    'UPDATE tag "GA4 - Purchase" (blockingTriggerId)',
+    `FAILED UPDATE tag "GA4 - Add To Cart" (blockingTriggerId): GTM PUT ${CONTAINER}/workspaces/1/tags/11 failed (409): ${body}`,
+  ];
+  expect(await runApply(args({ commit: true }), { client: fakeGtm({ fail }).client, container, assertWriteAllowed: allowed })).toBe(1);
+  expect(err).toEqual(progress);
+
+  out.length = 0; err.length = 0;
+  expect(await runApply(args({ commit: true, json: true }), { client: fakeGtm({ fail }).client, container, assertWriteAllowed: allowed })).toBe(1);
+  expect(err).toEqual(progress);
+  const res = JSON.parse(out.join("\n"));
+  expect(res.ops.map((o: any) => o.action)).toEqual(["create", "update", "update"]);
+  expect(res.failed.op.name).toBe("GA4 - Add To Cart");
 });

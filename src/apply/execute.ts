@@ -3,6 +3,11 @@ import { ID_FIELD, newRef, type Op } from "./plan.ts";
 
 export interface ExecResult { applied: Op[]; failed?: { op: Op; error: string }; pending: Op[]; }
 
+export interface ExecOpts {
+  // Called as each sent op lands or fails, so a long paced run shows progress.
+  onOp?: (op: Op, result: "applied" | "failed", error?: string) => void;
+}
+
 // Replaces every `@new:…` placeholder string, at any depth, with the id GTM
 // returned for that create. A placeholder with no earlier create is a bug in
 // the plan's ordering, so it fails the op rather than being sent.
@@ -21,7 +26,12 @@ function substitute(value: unknown, created: Map<string, string>): unknown {
 
 // Sends the plan's writes in order. GTM has no multi-entity transaction, so the
 // first failure stops the run; `applied` and `pending` say what did and did not land.
-export async function executePlan(ops: Op[], client: GtmClient, ws: string): Promise<ExecResult> {
+// A progress callback must never change or abort a run whose writes have landed.
+function notify(opts: ExecOpts, ...args: Parameters<NonNullable<ExecOpts["onOp"]>>): void {
+  try { opts.onOp?.(...args); } catch { /* progress output only */ }
+}
+
+export async function executePlan(ops: Op[], client: GtmClient, ws: string, opts: ExecOpts = {}): Promise<ExecResult> {
   const writes = ops.filter((op) => op.action !== "unchanged");
   const created = new Map<string, string>();
   const applied: Op[] = [];
@@ -43,8 +53,11 @@ export async function executePlan(ops: Op[], client: GtmClient, ws: string): Pro
         applied.push(op);
       }
     } catch (e) {
-      return { applied, failed: { op, error: e instanceof Error ? e.message : String(e) }, pending: writes.slice(i + 1) };
+      const error = e instanceof Error ? e.message : String(e);
+      notify(opts, op, "failed", error);
+      return { applied, failed: { op, error }, pending: writes.slice(i + 1) };
     }
+    notify(opts, op, "applied");
   }
   return { applied, pending: [] };
 }

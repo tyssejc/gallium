@@ -111,10 +111,14 @@ export async function runApply(
         // A workspace created this run exists now; never leave it unreported.
         if (target.mode === "existing") throw e;
         outcome = { ops: [], workspaceId, error: errorText(e) };
-        report(args, c, target.name, outcome);
+        report(args, target.name, outcome, c);
         return 1;
       }
-      const exec = await executePlan(ops, client, ws);
+      // Progress goes to stderr as each write lands: a paced commit can take
+      // minutes, and stdout must stay the report (parseable under --json).
+      const exec = await executePlan(ops, client, ws, {
+        onOp: (op, result, error) => console.error(result === "applied" ? opLine(op) : `FAILED ${opLine(op)}: ${error}`),
+      });
       outcome = { ops, exec, workspaceId };
       // Re-read and re-plan: every planned change must now be present, so the
       // same spec plans to nothing but UNCHANGED. A failure here must not hide
@@ -128,7 +132,7 @@ export async function runApply(
       }
     }
 
-    report(args, c, target.name, outcome);
+    report(args, target.name, outcome, c);
     return outcome.exec?.failed || outcome.unverified?.length || outcome.error ? 1 : 0;
   } catch (e) {
     if (e instanceof PlanError) {
@@ -140,7 +144,8 @@ export async function runApply(
 }
 
 function report(
-  args: { commit: boolean; json: boolean }, c: ResolvedContainer, name: string, { ops, exec, unverified, workspaceId, error }: Outcome,
+  args: { alias: string; commit: boolean; json: boolean }, name: string, { ops, exec, unverified, workspaceId, error }: Outcome,
+  c: ResolvedContainer,
 ): void {
   const url = workspaceId
     ? `https://tagmanager.google.com/#/container/accounts/${c.accountId}/containers/${c.containerId}/workspaces/${workspaceId}`
@@ -148,7 +153,8 @@ function report(
 
   if (args.json) {
     console.log(JSON.stringify({
-      workspace: { name, ...(workspaceId && { id: workspaceId, url }) },
+      container: args.alias,
+      workspace: { name, id: workspaceId ?? null, ...(url && { url }) },
       committed: args.commit,
       ops,
       ...(exec?.failed && { failed: exec.failed, pending: exec.pending }),
@@ -158,7 +164,8 @@ function report(
     return;
   }
 
-  const lines: string[] = [];
+  // Names the target first, so it can be read back before a commit.
+  const lines: string[] = [`Target: ${args.alias} — workspace "${name}" (${workspaceId ?? "will be created"})`];
   if (!args.commit) {
     lines.push("DRY RUN — nothing sent. Re-run with --commit to apply.", ...ops.map(opLine));
   } else if (exec?.failed) {

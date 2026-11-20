@@ -94,3 +94,27 @@ test("a create response without an id fails that op and sends nothing that depen
   expect(res.failed?.error).toBe('create trigger "Block - GPC Enabled" returned no triggerId');
   expect(res.pending.map((o) => o.name)).toEqual(["GA4 - Purchase"]);
 });
+
+test("onOp reports each sent op as it lands or fails, in order", async () => {
+  const seen: string[] = [];
+  const onOp = (op: Op, result: "applied" | "failed", error?: string) =>
+    seen.push(`${result} ${op.action} ${op.name}${error ? `: ${error}` : ""}`);
+  await executePlan([createTrigger, unchangedTag, updateTag, deleteVar], recorder({ ids: ["99"] }).client, WS, { onOp });
+  expect(seen).toEqual(["applied create Block - GPC Enabled", "applied update GA4 - Purchase", "applied delete X"]);
+
+  seen.length = 0;
+  await executePlan([createTrigger, unchangedTag, updateTag, deleteVar], recorder({ ids: ["99"], failAt: 2 }).client, WS, { onOp });
+  expect(seen).toEqual(["applied create Block - GPC Enabled", "failed update GA4 - Purchase: GTM PUT x failed (409): boom"]);
+});
+
+test("a throwing onOp never changes or aborts the result", async () => {
+  const ops = [createTrigger, unchangedTag, updateTag, deleteVar];
+  const onOp = () => { throw new Error("stderr closed"); };
+  for (const failAt of [undefined, 2]) {
+    const plain = recorder({ ids: ["99"], failAt });
+    const noisy = recorder({ ids: ["99"], failAt });
+    const expected = await executePlan(ops, plain.client, WS);
+    expect(await executePlan(ops, noisy.client, WS, { onOp })).toEqual(expected);
+    expect(noisy.calls).toEqual(plain.calls);
+  }
+});

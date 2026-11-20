@@ -53,3 +53,17 @@ test("isQuotaError", () => {
   expect(isQuotaError(403, '{"error":{"status":"PERMISSION_DENIED","message":"insufficient permissions"}}')).toBe(false);
   expect(isQuotaError(500, "quota")).toBe(false);
 });
+
+test("onWait is called before a sleep longer than 5 s, and not for a short one", async () => {
+  const waits: number[] = [];
+  let t = 1_000;
+  const p = filePacer({ path: tmpPath(), limit: 1, windowMs: 100_000, now: () => t,
+    sleep: async () => {}, onWait: (ms) => { waits.push(ms); } });
+  await p.acquire();
+  t = 31_000;
+  await p.acquire();             // waits 70 s
+  expect(waits).toEqual([70_000]);
+  t = 127_000;                   // oldest stamp in the window is 31_000 → waits 4 s
+  await p.acquire();
+  expect(waits).toEqual([70_000]);
+});

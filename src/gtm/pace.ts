@@ -10,7 +10,11 @@ export interface FilePacerOpts {
   windowMs?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  // Called before a sleep long enough to look like a hang (over 5 s).
+  onWait?: (ms: number) => void;
 }
+
+const QUIET_WAIT_MS = 5_000;
 
 async function readStamps(path: string): Promise<number[]> {
   try {
@@ -34,6 +38,7 @@ export function filePacer(opts: FilePacerOpts = {}): Pacer {
       let stamps = (await readStamps(path)).filter((t) => t > now() - windowMs);
       if (stamps.length >= limit) {
         const wait = Math.min(...stamps) + windowMs - now();
+        if (wait > QUIET_WAIT_MS) opts.onWait?.(wait);
         if (wait > 0) await sleep(wait);
         stamps = stamps.filter((t) => t > now() - windowMs);
       }

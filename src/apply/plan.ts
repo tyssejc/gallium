@@ -27,6 +27,15 @@ export const ID_FIELD: Record<WriteKind, string> = { tag: "tagId", trigger: "tri
 const NOT_IN_BODY: ReadonlySet<string> = new Set(["kind", "name", "delete", "rename", "folder", ...TRIGGER_LIST_HELPERS]);
 const WRITE_ORDER: WriteKind[] = ["folder", "variable", "trigger", "tag"];
 
+// GTM's built-in triggers have fixed ids and are not returned by triggers.list,
+// so they are never in a snapshot. Keyed by normName.
+const BUILT_IN_TRIGGERS: ReadonlyMap<string, string> = new Map([
+  ["all pages", "2147479553"],
+  ["initialization - all pages", "2147479573"],
+  ["consent initialization - all pages", "2147479572"],
+]);
+const isBuiltInTrigger = (name: string): boolean => BUILT_IN_TRIGGERS.has(normName(name));
+
 // One entity in the post-plan state. `stored` is the workspace's copy (absent
 // for creates); `name` and `body` are what the entity will be after the plan.
 interface Node { kind: WriteKind; id: string; name: string; body: Body; stored?: Body; deleted: boolean; }
@@ -116,6 +125,13 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
       continue;
     }
     const target = found[0];
+    // An entry that would create, delete or rename a built-in trigger, or
+    // rename a workspace trigger onto a built-in's name. A workspace trigger
+    // that merely shares a built-in's name is an ordinary trigger.
+    if (entry.kind === "trigger" && ((!target && isBuiltInTrigger(name)) || (entry.rename && isBuiltInTrigger(entry.rename)))) {
+      problems.push(`${label}: built-in triggers cannot be created, renamed or deleted`);
+      continue;
+    }
     if (target) {
       const other = claimedBy.get(target);
       if (other) {
@@ -162,6 +178,8 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
   const resolveId = (kind: "trigger" | "folder", name: string, label: string): string | undefined => {
     const found = liveNamed(kind, name);
     if (found.length === 1) return found[0]!.id;
+    const builtIn = kind === "trigger" ? BUILT_IN_TRIGGERS.get(normName(name)) : undefined;
+    if (!found.length && builtIn) return builtIn;
     problems.push(found.length
       ? `${label}: ${kind} "${name.trim()}" matches ${found.length} ${kind}s (ids ${idsOf(found)})`
       : `${label}: ${kind} "${name.trim()}" not found`);
@@ -169,18 +187,26 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
   const resolveAll = (names: string[], label: string): string[] =>
     names.map((n) => resolveId("trigger", n, label)).filter((id): id is string => id !== undefined);
 
-  // Removal matches the current or post-plan name and tolerates an absent
-  // trigger, so a re-run after the trigger is deleted stays unchanged.
-  const removalIds = (names: string[]): Set<string> => new Set(names.flatMap((name) =>
-    nodes.filter((n) => n.kind === "trigger"
+  // Removal matches the current or post-plan name, then a built-in trigger. A
+  // name matching nothing is an error (a typo would leave the tag firing),
+  // except one this spec deletes, so a re-run after the delete stays unchanged.
+  const specDeletes = new Set(entries.filter((e) => e.kind === "trigger" && e.delete).map((e) => normName(e.name)));
+  const removalIds = (names: string[], label: string): Set<string> => new Set(names.flatMap((name) => {
+    const ids = nodes.filter((n) => n.kind === "trigger"
       && (normName(n.name) === normName(name) || (n.stored && normName(n.stored.name as string) === normName(name))))
-      .map((n) => n.id)));
+      .map((n) => n.id);
+    if (ids.length) return ids;
+    const builtIn = BUILT_IN_TRIGGERS.get(normName(name));
+    if (builtIn) return [builtIn];
+    if (!specDeletes.has(normName(name))) problems.push(`${label}: trigger "${name.trim()}" not found`);
+    return [];
+  }));
 
   const applyTriggerList = (body: Body, field: string, label: string, set?: string[], add?: string[], remove?: string[]) => {
     if (!set && !add && !remove) return;
     const ids = set ? resolveAll(set, label) : [...((body[field] as string[] | undefined) ?? [])];
     for (const id of resolveAll(add ?? [], label)) if (!ids.includes(id)) ids.push(id);
-    const drop = removalIds(remove ?? []);
+    const drop = removalIds(remove ?? [], label);
     body[field] = ids.filter((id) => !drop.has(id));
   };
 

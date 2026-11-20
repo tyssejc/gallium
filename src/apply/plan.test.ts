@@ -345,3 +345,61 @@ test("a create under the name of an entity the same spec deletes is rejected", a
     { kind: "tag", name: "ads - linker", type: "html" },
   ])).toEqual(['tag "ads - linker": refers to the same tag (11) as tag "Ads - Linker"']);
 });
+
+// GTM's built-in triggers are not returned by triggers.list, so a real
+// snapshot never contains them.
+function noBuiltIns(): EntitySnapshot {
+  const snap = fixture();
+  snap.trigger = [{ ...RAW, triggerId: "4", name: "Checkout", type: "pageview", fingerprint: "114" }] as EntitySnapshot["trigger"];
+  snap.tag![0]!.firingTriggerId = ["2147479553"];
+  snap.tag![1]!.firingTriggerId = ["4"];
+  return snap;
+}
+
+test("built-in trigger names resolve when the workspace has no trigger of that name", () => {
+  const [op] = buildPlan([{ kind: "tag", name: "New", type: "html", firingTriggers: ["All Pages"],
+    blockingTriggers: ["initialization - all pages", "Consent Initialization - All Pages"] }], noBuiltIns());
+  expect(op!.body!.firingTriggerId).toEqual(["2147479553"]);
+  expect(op!.body!.blockingTriggerId).toEqual(["2147479573", "2147479572"]);
+
+  const [add] = buildPlan([{ kind: "tag", name: "Ads - Linker", addFiringTriggers: [" all pages "] }], noBuiltIns());
+  expect(add!.body!.firingTriggerId).toEqual(["4", "2147479553"]);
+
+  // A workspace trigger with the same name wins.
+  const [own] = buildPlan([{ kind: "tag", name: "New", type: "html", firingTriggers: ["All Pages"] }], fixture());
+  expect(own!.body!.firingTriggerId).toEqual(["3"]);
+});
+
+test("removeFiringTriggers removes a built-in trigger by name", () => {
+  const [op] = buildPlan([{ kind: "tag", name: "GA4 - Purchase", removeFiringTriggers: ["All Pages"] }], noBuiltIns());
+  expect(op).toMatchObject({ action: "update", id: "10", changed: ["firingTriggerId"] });
+  expect(op!.body!.firingTriggerId).toEqual([]);
+});
+
+test("a trigger entry naming a built-in trigger is refused", () => {
+  expect(problems([{ kind: "trigger", name: "All Pages", type: "pageview" }], noBuiltIns()))
+    .toEqual(['trigger "All Pages": built-in triggers cannot be created, renamed or deleted']);
+  expect(problems([{ kind: "trigger", name: "all pages", delete: true }], noBuiltIns()))
+    .toEqual(['trigger "all pages": built-in triggers cannot be created, renamed or deleted']);
+  expect(problems([{ kind: "trigger", name: "Initialization - All Pages", rename: "Init" }], noBuiltIns()))
+    .toEqual(['trigger "Initialization - All Pages": built-in triggers cannot be created, renamed or deleted']);
+  expect(problems([{ kind: "trigger", name: "Checkout", rename: "Consent Initialization - All Pages" }], noBuiltIns()))
+    .toEqual(['trigger "Checkout": built-in triggers cannot be created, renamed or deleted']);
+});
+
+test("a removal name that matches no trigger is an error", () => {
+  expect(problems([{ kind: "tag", name: "Ads - Linker", removeFiringTriggers: ["Chekout"], removeBlockingTriggers: ["Nope"] }], noBuiltIns()))
+    .toEqual(['tag "Ads - Linker": trigger "Chekout" not found', 'tag "Ads - Linker": trigger "Nope" not found']);
+});
+
+test("a removal name is tolerated when the same spec deletes that trigger", () => {
+  // Re-run after the delete landed: the trigger is gone and the tag no longer uses it.
+  const entries: SpecEntry[] = [
+    { kind: "trigger", name: "Old Trigger", delete: true },
+    { kind: "tag", name: "Ads - Linker", removeFiringTriggers: ["old trigger"] },
+  ];
+  expect(buildPlan(entries, noBuiltIns())).toEqual([
+    { action: "unchanged", kind: "trigger", name: "Old Trigger" },
+    { action: "unchanged", kind: "tag", name: "Ads - Linker", id: "11" },
+  ]);
+});
