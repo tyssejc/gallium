@@ -23,7 +23,7 @@ export class PlanError extends Error {
 
 type Body = Record<string, unknown>;
 
-const ID_FIELD: Record<WriteKind, string> = { tag: "tagId", trigger: "triggerId", variable: "variableId", folder: "folderId" };
+export const ID_FIELD: Record<WriteKind, string> = { tag: "tagId", trigger: "triggerId", variable: "variableId", folder: "folderId" };
 const NOT_IN_BODY: ReadonlySet<string> = new Set(["kind", "name", "delete", "rename", "folder", ...TRIGGER_LIST_HELPERS]);
 const WRITE_ORDER: WriteKind[] = ["folder", "variable", "trigger", "tag"];
 

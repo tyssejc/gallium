@@ -82,3 +82,17 @@ test("an unknown verb under an entity group returns 1", async () => {
   const orig = console.error; console.error = () => {};
   try { expect(await run(["tags", "bogus"])).toBe(1); } finally { console.error = orig; }
 });
+
+test("apply is routed and listed in help", async () => {
+  const { flat } = helpLines(await help());
+  expect(flat).toContain("apply");
+  await expect(run(["apply"])).rejects.toThrow(
+    "usage: gallium apply <spec.json> -c <alias> --workspace <name|new:Title> [--commit]");
+});
+
+test("apply parses --commit, --workspace and --write", async () => {
+  // Without -c, apply stops before reading config; reaching that error means
+  // parseArgs accepted every flag (an unknown one would throw first).
+  await expect(run(["apply", "spec.json", "--commit", "--workspace", "new:X", "--write"]))
+    .rejects.toThrow("apply requires -c <alias>");
+});
