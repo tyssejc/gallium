@@ -61,6 +61,9 @@ const OPTIONS = {
   limit: { type: "string" },
   dates: { type: "boolean", default: false },
   against: { type: "string" },
+  write: { type: "boolean", default: false },
+  commit: { type: "boolean", default: false },
+  workspace: { type: "string" },
 } as const;
 
 export async function run(argv: string[]): Promise<number> {

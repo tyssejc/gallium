@@ -1,8 +1,9 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { getAccessToken, getUserToken } from "./token.ts";
+import { getAccessToken, getUserToken, assertWriteAllowed, oauthRefreshPath, oauthScopePath } from "./token.ts";
+import { TAGMANAGER_READONLY_SCOPE, TAGMANAGER_EDIT_CONTAINERS_SCOPE } from "./oauth.ts";
 
 test("getAccessToken caches until near expiry", async () => {
   const dir = mkdtempSync(join(tmpdir(), "gallium-tok-"));
@@ -55,4 +56,36 @@ test("getUserToken throws 'Not logged in' when oauth is configured but no refres
 
 test("getUserToken throws 'No credentials' for an empty config", async () => {
   await expect(getUserToken({ containers: {} })).rejects.toThrow(/No credentials/);
+});
+
+async function withCache(setup: (() => void) | null, fn: () => Promise<void>) {
+  const dir = mkdtempSync(join(tmpdir(), "gallium-write-"));
+  const orig = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = dir;
+  try { setup?.(); await fn(); }
+  finally {
+    if (orig === undefined) delete process.env.XDG_CACHE_HOME; else process.env.XDG_CACHE_HOME = orig;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+function writeTokenFiles(scope: string | null) {
+  mkdirSync(join(oauthRefreshPath(), ".."), { recursive: true });
+  writeFileSync(oauthRefreshPath(), "rt");
+  if (scope !== null) writeFileSync(oauthScopePath(), scope);
+}
+
+test("assertWriteAllowed passes when the recorded scope includes edit.containers", async () => {
+  await withCache(() => writeTokenFiles(`${TAGMANAGER_READONLY_SCOPE} ${TAGMANAGER_EDIT_CONTAINERS_SCOPE}`),
+    async () => { await assertWriteAllowed(); });
+});
+test("assertWriteAllowed rejects a read-only grant", async () => {
+  await withCache(() => writeTokenFiles(TAGMANAGER_READONLY_SCOPE),
+    async () => { await expect(assertWriteAllowed()).rejects.toThrow(/gallium login --write/); });
+});
+test("assertWriteAllowed rejects when there is no scope file", async () => {
+  await withCache(() => writeTokenFiles(null),
+    async () => { await expect(assertWriteAllowed()).rejects.toThrow(/gallium login --write/); });
+});
+test("assertWriteAllowed rejects when there is no OAuth refresh token", async () => {
+  await withCache(null, async () => { await expect(assertWriteAllowed()).rejects.toThrow(/service account/i); });
 });

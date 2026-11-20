@@ -1,7 +1,7 @@
 import { ensureDirFor } from "../util/fs.ts";
 import { tokenCachePath } from "../paths.ts";
 import type { Config } from "../config/config.ts";
-import { refreshAccessToken, TAGMANAGER_READONLY_SCOPE } from "./oauth.ts";
+import { refreshAccessToken, TAGMANAGER_READONLY_SCOPE, TAGMANAGER_EDIT_CONTAINERS_SCOPE } from "./oauth.ts";
 import { exchangeJwtForToken, signServiceAccountJwt, type ServiceAccountKey } from "./serviceAccount.ts";
 import { chmod } from "node:fs/promises";
 
@@ -29,6 +29,20 @@ export async function getAccessToken(opts: CoreOpts): Promise<string> {
 }
 
 export function oauthRefreshPath(): string { return `${tokenCachePath("oauth")}.refresh`; }
+
+export function oauthScopePath(): string { return `${tokenCachePath("oauth")}.scope`; }
+
+// Gate for every write: only an OAuth login that was granted edit.containers may write.
+export async function assertWriteAllowed(): Promise<void> {
+  if (!(await Bun.file(oauthRefreshPath()).exists())) {
+    throw new Error("Writes need an OAuth login; service account credentials are read-only. Run: gallium login --write");
+  }
+  const scopeFile = Bun.file(oauthScopePath());
+  const scope = (await scopeFile.exists()) ? await scopeFile.text() : "";
+  if (!scope.split(/\s+/).includes(TAGMANAGER_EDIT_CONTAINERS_SCOPE)) {
+    throw new Error("This login is read-only. Run: gallium login --write");
+  }
+}
 
 export async function getUserToken(cfg: Config): Promise<string> {
   const refreshPath = oauthRefreshPath();
