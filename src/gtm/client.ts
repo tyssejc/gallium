@@ -3,10 +3,24 @@ import type {
   GtmAccount, GtmContainer, GtmWorkspace, GtmEnvironment, GtmVersionHeader, GtmContainerVersion,
 } from "./types.ts";
 
+import { isQuotaError, type Pacer } from "./pace.ts";
+
 const BASE = "https://tagmanager.googleapis.com/tagmanager/v2";
+const MAX_ATTEMPTS = 5;
+
+export interface GtmClientOpts {
+  pacer?: Pacer;
+  sleep?: (ms: number) => Promise<void>;
+}
 
 export class GtmClient {
-  constructor(private token: string, private fetchFn: typeof fetch = fetch) {}
+  private pacer?: Pacer;
+  private sleep: (ms: number) => Promise<void>;
+
+  constructor(private token: string, private fetchFn: typeof fetch = fetch, opts: GtmClientOpts = {}) {
+    this.pacer = opts.pacer;
+    this.sleep = opts.sleep ?? ((ms) => Bun.sleep(ms));
+  }
 
   wsPath(accountId: string, containerId: string, workspaceId: string): string {
     return `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
@@ -16,12 +30,40 @@ export class GtmClient {
     return { Authorization: `Bearer ${this.token}`, Accept: "application/json" };
   }
 
-  private async getJson(path: string, query: Record<string, string> = {}): Promise<any> {
-    const qs = new URLSearchParams(query).toString();
+  // Paced fetch with retry on quota errors (429 / quota 403). Returns parsed JSON, or undefined for an empty body.
+  protected async request(
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    path: string,
+    opts: { query?: Record<string, string>; body?: unknown } = {},
+  ): Promise<any> {
+    const qs = new URLSearchParams(opts.query ?? {}).toString();
     const url = `${BASE}/${path}${qs ? `?${qs}` : ""}`;
-    const res = await this.fetchFn(url, { headers: this.headers() });
-    if (!res.ok) throw new Error(`GTM GET ${path} failed (${res.status}): ${await res.text()}`);
-    return res.json();
+    const headers: Record<string, string> = this.headers();
+    const init: RequestInit = { method, headers };
+    if (opts.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify(opts.body);
+    }
+    for (let attempt = 0; ; attempt++) {
+      await this.pacer?.acquire();
+      const res = await this.fetchFn(url, init);
+      if (res.ok) {
+        const text = await res.text();
+        return text ? JSON.parse(text) : undefined;
+      }
+      const body = await res.text();
+      if (attempt + 1 >= MAX_ATTEMPTS || !isQuotaError(res.status, body)) {
+        throw new Error(`GTM ${method} ${path} failed (${res.status}): ${body}`);
+      }
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      await this.sleep(retryAfter > 0
+        ? retryAfter * 1000
+        : Math.min(60_000, 2_000 * 2 ** attempt) + Math.random() * 1000);
+    }
+  }
+
+  private getJson(path: string, query: Record<string, string> = {}): Promise<any> {
+    return this.request("GET", path, { query });
   }
 
   // Pages through `nextPageToken`, collecting the array under `field`.

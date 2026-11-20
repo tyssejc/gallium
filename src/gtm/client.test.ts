@@ -132,3 +132,66 @@ test("getLiveVersion and getLatestVersionHeader hit their special endpoints", as
   expect(calls[0]).toContain("accounts/111/containers/222/versions:live");
   expect(calls[1]).toContain("accounts/111/containers/222/version_headers:latest");
 });
+
+const quota403 = '{"error":{"errors":[{"reason":"rateLimitExceeded"}]}}';
+const noSleep = async () => {};
+
+test("every request acquires the pacer first", async () => {
+  let acquires = 0;
+  const fetchFn = (async (url: string) =>
+    url.includes("pageToken=p2") ? jsonResponse({ tag: [] }) : jsonResponse({ tag: [], nextPageToken: "p2" })) as unknown as typeof fetch;
+  const client = new GtmClient("tok", fetchFn, { pacer: { acquire: async () => { acquires++; } }, sleep: noSleep });
+  await client.listTags("accounts/1/containers/2/workspaces/3");
+  expect(acquires).toBe(2);
+});
+
+test("retries a 429 then succeeds", async () => {
+  const statuses = [429, 429, 200];
+  let fetches = 0;
+  const fetchFn = (async () => {
+    const s = statuses[fetches++]!;
+    return s === 200 ? jsonResponse({ tag: [{ tagId: "1" }] }) : new Response("slow down", { status: s });
+  }) as unknown as typeof fetch;
+  const sleeps: number[] = [];
+  const client = new GtmClient("tok", fetchFn, { sleep: async (ms) => { sleeps.push(ms); } });
+  const tags = await client.listTags("accounts/1/containers/2/workspaces/3");
+  expect(tags.length).toBe(1);
+  expect(fetches).toBe(3);
+  expect(sleeps.length).toBe(2);
+});
+
+test("honours Retry-After seconds", async () => {
+  let fetches = 0;
+  const fetchFn = (async () =>
+    fetches++ === 0 ? new Response("", { status: 429, headers: { "Retry-After": "7" } }) : jsonResponse({ tag: [] })) as unknown as typeof fetch;
+  const sleeps: number[] = [];
+  const client = new GtmClient("tok", fetchFn, { sleep: async (ms) => { sleeps.push(ms); } });
+  await client.listTags("accounts/1/containers/2/workspaces/3");
+  expect(sleeps).toEqual([7000]);
+});
+
+test("retries a quota 403", async () => {
+  let fetches = 0;
+  const fetchFn = (async () =>
+    fetches++ === 0 ? new Response(quota403, { status: 403 }) : jsonResponse({ tag: [] })) as unknown as typeof fetch;
+  const client = new GtmClient("tok", fetchFn, { sleep: noSleep });
+  await client.listTags("accounts/1/containers/2/workspaces/3");
+  expect(fetches).toBe(2);
+});
+
+test("gives up after 5 attempts", async () => {
+  let fetches = 0;
+  const fetchFn = (async () => { fetches++; return new Response("no", { status: 429 }); }) as unknown as typeof fetch;
+  const client = new GtmClient("tok", fetchFn, { sleep: noSleep });
+  await expect(client.listTags("accounts/1/containers/2/workspaces/3")).rejects.toThrow(/failed \(429\)/);
+  expect(fetches).toBe(5);
+});
+
+test("does not retry a permission 403", async () => {
+  let fetches = 0;
+  const body = '{"error":{"status":"PERMISSION_DENIED","message":"insufficient permissions"}}';
+  const fetchFn = (async () => { fetches++; return new Response(body, { status: 403 }); }) as unknown as typeof fetch;
+  const client = new GtmClient("tok", fetchFn, { sleep: noSleep });
+  await expect(client.listTags("accounts/1/containers/2/workspaces/3")).rejects.toThrow(/403/);
+  expect(fetches).toBe(1);
+});

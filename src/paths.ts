@@ -30,3 +30,6 @@ export function skillInstallDir(env: Env = process.env): string {
     : `${env.HOME ?? ""}/.claude`;
   return `${claudeDir}/skills/gallium`;
 }
+export function rateLimitPath(env: Env = process.env): string {
+  return `${cacheDir(env)}/.ratelimit.json`;
+}

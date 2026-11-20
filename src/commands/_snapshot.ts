@@ -3,7 +3,8 @@ import type { SnapshotRef } from "../config/ref.ts";
 import { configPath, versionDbPath } from "../paths.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
 import { getUserToken } from "../auth/token.ts";
-import { GtmClient } from "../gtm/client.ts";
+import type { GtmClient } from "../gtm/client.ts";
+import { liveClient } from "../gtm/live.ts";
 import { openVersionDb } from "../cache/db.ts";
 import { getMeta } from "../cache/repo.ts";
 import { pullVersion } from "../pull/pull.ts";
@@ -55,7 +56,7 @@ export interface OpenedSnapshot {
 export async function openSnapshot(alias: string, snap: SnapshotRef): Promise<OpenedSnapshot> {
   const cfg = await loadConfig(configPath());
   const r = resolveContainer(cfg, alias);
-  const client = new GtmClient(await getUserToken(cfg));
+  const client = liveClient(await getUserToken(cfg));
   const versionId = await resolveSnapshotVersionId(client, r.accountId, r.containerId, snap);
 
   const db = await openVersionDb(alias, versionId);

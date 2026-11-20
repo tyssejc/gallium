@@ -2,12 +2,13 @@ import type { Cmd } from "../command.ts";
 import { configPath } from "../paths.ts";
 import { loadConfig } from "../config/config.ts";
 import { getUserToken } from "../auth/token.ts";
-import { GtmClient } from "../gtm/client.ts";
+import type { GtmClient } from "../gtm/client.ts";
+import { liveClient } from "../gtm/live.ts";
 import { format } from "../output.ts";
 
 async function client(): Promise<GtmClient> {
   const cfg = await loadConfig(configPath());
-  return new GtmClient(await getUserToken(cfg));
+  return liveClient(await getUserToken(cfg));
 }
 
 // gallium accounts

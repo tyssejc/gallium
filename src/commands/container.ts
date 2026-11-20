@@ -4,7 +4,7 @@ import { loadConfig, resolveContainer } from "../config/config.ts";
 import { loadState, saveState } from "../config/state.ts";
 import { openDb } from "../cache/db.ts";
 import { getMeta } from "../cache/repo.ts";
-import { GtmClient } from "../gtm/client.ts";
+import { liveClient } from "../gtm/live.ts";
 import { getUserToken } from "../auth/token.ts";
 import { pullWorkspace } from "../pull/pull.ts";
 import { resolveAlias, requireWorkspaceAlias } from "./_shared.ts";
@@ -95,7 +95,7 @@ export const cmdContainerPull: Cmd = async (positionals, flags) => {
   const cfg = await loadConfig(configPath());
   const r = resolveContainer(cfg, alias);
   const token = await getUserToken(cfg);
-  const client = new GtmClient(token);
+  const client = liveClient(token);
   const db = await openDb(alias);
   const ws = client.wsPath(r.accountId, r.containerId, r.workspaceId);
   await pullWorkspace(db, client, ws, new Date().toISOString());
