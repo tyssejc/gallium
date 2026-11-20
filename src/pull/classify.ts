@@ -1,4 +1,4 @@
-import type { GtmParameter } from "../gtm/types.ts";
+import type { GtmCondition, GtmParameter } from "../gtm/types.ts";
 
 export function collectParameterStrings(params?: GtmParameter[]): string[] {
   const out: string[] = [];
@@ -8,6 +8,26 @@ export function collectParameterStrings(params?: GtmParameter[]): string[] {
     if (p.map) out.push(...collectParameterStrings(p.map));
   }
   return out;
+}
+
+function conditionStrings(conds?: GtmCondition[]): string[] {
+  return (conds ?? []).flatMap((c) => collectParameterStrings(c.parameter));
+}
+
+// Every string an entity carries that may hold a `{{variable}}` reference or
+// match a search: parameters for all kinds, plus a trigger's condition lists.
+export function entityStrings(
+  kind: "tag" | "trigger" | "variable",
+  e: { parameter?: GtmParameter[]; filter?: GtmCondition[]; customEventFilter?: GtmCondition[]; autoEventFilter?: GtmCondition[] },
+): string[] {
+  const strings = collectParameterStrings(e.parameter);
+  if (kind !== "trigger") return strings;
+  return [
+    ...strings,
+    ...conditionStrings(e.filter),
+    ...conditionStrings(e.customEventFilter),
+    ...conditionStrings(e.autoEventFilter),
+  ];
 }
 
 const VAR_RE = /\{\{\s*([^{}]+?)\s*\}\}/g;

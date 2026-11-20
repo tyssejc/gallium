@@ -1,17 +1,13 @@
 import type { Database } from "bun:sqlite";
 import type { GtmClient } from "../gtm/client.ts";
 import type {
-  GtmParameter, GtmTag, GtmTrigger, GtmVariable,
+  GtmTag, GtmTrigger, GtmVariable,
   GtmBuiltInVariable, GtmFolder, GtmTemplate, GtmContainerVersion,
 } from "../gtm/types.ts";
 import {
   resetDerived, upsertEntity, recordVariableRef, recordTagTrigger, recordChange, setMeta, countEntities,
 } from "../cache/repo.ts";
-import { collectParameterStrings, extractVariableRefs, buildSearchText } from "./classify.ts";
-
-function conditionStrings(conds?: Array<{ parameter?: GtmParameter[] }>): string[] {
-  return (conds ?? []).flatMap((c) => collectParameterStrings(c.parameter));
-}
+import { entityStrings, extractVariableRefs, buildSearchText } from "./classify.ts";
 
 function recordRefs(db: Database, kind: string, id: string, strings: string[]): void {
   for (const ref of extractVariableRefs(strings)) recordVariableRef(db, kind, id, ref);
@@ -26,7 +22,7 @@ export interface EntitySnapshot {
 // entity arrays, so both funnel through here.
 export function ingestEntities(db: Database, snap: EntitySnapshot): void {
   for (const t of snap.tag ?? []) {
-    const strings = collectParameterStrings(t.parameter);
+    const strings = entityStrings("tag", t);
     upsertEntity(db, { id: t.tagId, kind: "tag", name: t.name, type: t.type, paused: !!t.paused,
       parentFolderId: t.parentFolderId ?? null, rawJson: JSON.stringify(t), searchText: buildSearchText(t.name, strings) });
     recordRefs(db, "tag", t.tagId, strings);
@@ -35,19 +31,14 @@ export function ingestEntities(db: Database, snap: EntitySnapshot): void {
   }
 
   for (const tr of snap.trigger ?? []) {
-    const strings = [
-      ...collectParameterStrings(tr.parameter),
-      ...conditionStrings(tr.filter),
-      ...conditionStrings(tr.customEventFilter),
-      ...conditionStrings(tr.autoEventFilter),
-    ];
+    const strings = entityStrings("trigger", tr);
     upsertEntity(db, { id: tr.triggerId, kind: "trigger", name: tr.name, type: tr.type, paused: false,
       parentFolderId: tr.parentFolderId ?? null, rawJson: JSON.stringify(tr), searchText: buildSearchText(tr.name, strings) });
     recordRefs(db, "trigger", tr.triggerId, strings);
   }
 
   for (const v of snap.variable ?? []) {
-    const strings = collectParameterStrings(v.parameter);
+    const strings = entityStrings("variable", v);
     upsertEntity(db, { id: v.variableId, kind: "variable", name: v.name, type: v.type, paused: false,
       parentFolderId: v.parentFolderId ?? null, rawJson: JSON.stringify(v), searchText: buildSearchText(v.name, strings) });
     recordRefs(db, "variable", v.variableId, strings);
