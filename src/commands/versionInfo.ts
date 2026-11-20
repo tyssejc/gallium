@@ -4,7 +4,7 @@ import { configPath } from "../paths.ts";
 import { loadConfig, resolveContainer } from "../config/config.ts";
 import { parseContainerRef, parseAgainst, describeSnapshot } from "../config/ref.ts";
 import { getUserToken } from "../auth/token.ts";
-import { GtmClient } from "../gtm/client.ts";
+import { liveClient } from "../gtm/live.ts";
 import { resolveAlias, deprecated } from "./_shared.ts";
 import { openSnapshot, snapshotDbPath } from "./_snapshot.ts";
 import { listEntities } from "../cache/repo.ts";
@@ -69,7 +69,7 @@ async function containerAndClient(flags: Record<string, unknown>) {
   const { alias } = parseContainerRef(await resolveAlias(flags));
   const cfg = await loadConfig(configPath());
   const r = resolveContainer(cfg, alias);
-  return { r, client: new GtmClient(await getUserToken(cfg)) };
+  return { r, client: liveClient(await getUserToken(cfg)) };
 }
 
 // gallium environments list [-c <ref>]
