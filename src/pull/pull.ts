@@ -59,18 +59,22 @@ export function ingestEntities(db: Database, snap: EntitySnapshot): void {
   }
 }
 
-export async function pullWorkspace(db: Database, client: GtmClient, ws: string, nowIso: string): Promise<void> {
-  resetDerived(db);
-  // Workspaces expose custom templates via a separate list call; versions inline
-  // them as `customTemplate`. Normalized here so ingest sees one shape.
-  ingestEntities(db, {
+// Workspaces expose custom templates via a separate list call; versions inline
+// them as `customTemplate`. Normalized here so callers see one shape.
+export async function fetchWorkspaceSnapshot(client: GtmClient, ws: string): Promise<EntitySnapshot> {
+  return {
     tag: await client.listTags(ws),
     trigger: await client.listTriggers(ws),
     variable: await client.listVariables(ws),
     builtInVariable: await client.listBuiltInVariables(ws),
     folder: await client.listFolders(ws),
     customTemplate: await client.listTemplates(ws),
-  });
+  };
+}
+
+export async function pullWorkspace(db: Database, client: GtmClient, ws: string, nowIso: string): Promise<void> {
+  resetDerived(db);
+  ingestEntities(db, await fetchWorkspaceSnapshot(client, ws));
 
   // GTM answers a list call on a non-existent workspace with an empty array
   // rather than a 404, so an empty ingest is indistinguishable from a healthy
