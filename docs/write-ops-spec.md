@@ -1,6 +1,6 @@
 # Spec: gallium write operations
 
-**Status:** draft for a future build session (scope bump handled separately).
+**Status:** superseded 2026-11-20 by `docs/superpowers/specs/2026-11-20-write-ops-design.md`. Kept for the reasoning; do not build from it.
 **Author context:** grows out of the AOLCC `form_start` build, where the entire GTM change (1 variable, 1 trigger, 2 tags) was authored by hand in the UI from a spec gallium had already computed. Gallium can *see* the container perfectly; it just can't *act* on it. This closes that gap — carefully.
 
 ## Design tenets
