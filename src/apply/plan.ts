@@ -1,6 +1,6 @@
 import type { WriteKind } from "../gtm/types.ts";
 import type { EntitySnapshot } from "../pull/pull.ts";
-import { entityStrings, extractVariableRefs } from "../pull/classify.ts";
+import { extractVariableRefs } from "../pull/classify.ts";
 import { normalizeForHash } from "../hash.ts";
 import { normName, TRIGGER_LIST_HELPERS, WRITE_KINDS, type SpecEntry } from "./spec.ts";
 
@@ -35,17 +35,57 @@ interface Work { entry: SpecEntry; label: string; node: Node; }
 
 const idsOf = (nodes: Node[]) => nodes.map((n) => n.id).join(", ");
 
-// Top-level fields whose canonical JSON differs. An empty array counts as
-// absent: GTM omits empty lists, so treating `[]` as a change would never converge.
+// Top-level fields whose canonical JSON differs. `false`, `""` and `[]` count
+// as absent: GTM omits default values, so treating them as changes would never converge.
 function changedFields(stored: Body, body: Body): string[] {
   const a = normalizeForHash(stored) as Body;
   const b = normalizeForHash(body) as Body;
-  const canon = (v: unknown) => (Array.isArray(v) && v.length === 0 ? undefined : JSON.stringify(v));
+  const canon = (v: unknown) =>
+    v === false || v === "" || (Array.isArray(v) && v.length === 0) ? undefined : JSON.stringify(v);
   return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => canon(a[k]) !== canon(b[k])).sort();
 }
 
+function* valuesIn(v: unknown): Generator<unknown> {
+  yield v;
+  if (Array.isArray(v)) for (const x of v) yield* valuesIn(x);
+  else if (v !== null && typeof v === "object") for (const x of Object.values(v)) yield* valuesIn(x);
+}
+
+// Every value anywhere in a body except its own `name` and `notes`, which
+// GTM does not resolve references in.
+const bodyValues = (body: Body): unknown[] =>
+  Object.entries(body).filter(([k]) => k !== "name" && k !== "notes").flatMap(([, v]) => [...valuesIn(v)]);
+
 const variableRefs = (n: Node): string[] =>
-  n.kind === "folder" ? [] : extractVariableRefs(entityStrings(n.kind, n.body));
+  extractVariableRefs(bodyValues(n.body).filter((v): v is string => typeof v === "string"));
+
+const hasParam = (n: Node, type: string, value: string): boolean =>
+  bodyValues(n.body).some((v) => v !== null && typeof v === "object"
+    && (v as Body).type === type && (v as Body).value === value);
+
+const listOf = (body: Body, field: string): unknown[] => (Array.isArray(body[field]) ? body[field] as unknown[] : []);
+
+// Whether `n` references `target`. Triggers and folders are referenced by id;
+// variables and tags by name, so a rename check passes the old name.
+function references(n: Node, target: Node, name: string): boolean {
+  switch (target.kind) {
+    case "trigger":
+      return (n.kind === "tag" && [...listOf(n.body, "firingTriggerId"), ...listOf(n.body, "blockingTriggerId")].includes(target.id))
+        || hasParam(n, "triggerReference", target.id);
+    case "variable":
+      return variableRefs(n).includes(name);
+    case "tag":
+      return (n.kind === "tag" && [...listOf(n.body, "setupTag"), ...listOf(n.body, "teardownTag")]
+        .some((s) => (s as Body | null)?.tagName === name))
+        || hasParam(n, "tagReference", name);
+    case "folder":
+      return n.body.parentFolderId === target.id;
+    default: {
+      const unknown: never = target.kind;
+      throw new Error(`no reference rule for kind ${unknown}`);
+    }
+  }
+}
 
 export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
   const problems: string[] = [];
@@ -65,6 +105,7 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
   // creates and deletes regardless of entry order.
   const writes: Work[] = [];
   const deletes: Work[] = [];
+  const claimedBy = new Map<Node, string>();
   for (const entry of entries) {
     const name = entry.name.trim();
     const label = `${entry.kind} "${name}"`;
@@ -75,6 +116,14 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
       continue;
     }
     const target = found[0];
+    if (target) {
+      const other = claimedBy.get(target);
+      if (other) {
+        problems.push(`${label}: refers to the same ${entry.kind} (${target.id}) as ${other}`);
+        continue;
+      }
+      claimedBy.set(target, label);
+    }
     if (entry.delete) {
       if (!target) ops.push({ action: "unchanged", kind: entry.kind, name });
       else { target.deleted = true; deletes.push({ entry, label, node: target }); }
@@ -89,6 +138,17 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
       const node: Node = { kind: entry.kind, id: newRef(entry.kind, name), name, body: {}, deleted: false };
       nodes.push(node);
       writes.push({ entry, label, node });
+    }
+  }
+
+  // A rename or create must not leave two live entities sharing a name.
+  const collided = new Set<string>();
+  for (const { node } of writes) {
+    const key = `${node.kind}\0${normName(node.name)}`;
+    const same = liveNamed(node.kind, node.name);
+    if (same.length > 1 && !collided.has(key)) {
+      collided.add(key);
+      problems.push(`${same.length} ${node.kind}s would be named "${node.name}" (ids ${idsOf(same)})`);
     }
   }
 
@@ -151,20 +211,23 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
     }
   }
 
-  // Pass 4: a delete is refused while anything surviving the plan still uses it.
+  // Pass 4: GTM neither cascades a delete nor rewrites references on a rename,
+  // so both are refused while anything surviving the plan still uses the target.
   const survivors = nodes.filter((n) => !n.deleted);
-  const uses = (n: Node, target: Node): boolean => {
-    if (target.kind === "trigger") {
-      return n.kind === "tag" && [...((n.body.firingTriggerId as string[]) ?? []), ...((n.body.blockingTriggerId as string[]) ?? [])].includes(target.id);
+  const usersOf = (target: Node, name: string) => survivors.filter((n) => n !== target && references(n, target, name));
+  const used = (user: Node) => `still used by ${user.kind} "${user.name}" (${user.id})`;
+  for (const { node } of writes) {
+    const oldName = node.stored?.name as string | undefined;
+    if (oldName === undefined || oldName === node.name || (node.kind !== "variable" && node.kind !== "tag")) continue;
+    // Another entity taking over the old name keeps the references resolving.
+    if (survivors.some((n) => n !== node && n.kind === node.kind && n.name === oldName)) continue;
+    for (const user of usersOf(node, oldName)) {
+      problems.push(`cannot rename ${node.kind} "${oldName}" to "${node.name}": ${used(user)}`);
     }
-    if (target.kind === "variable") return variableRefs(n).includes(target.stored!.name as string);
-    return n.body.parentFolderId === target.id;
-  };
+  }
   for (const { node } of deletes) {
     const name = node.stored!.name as string;
-    for (const user of survivors.filter((n) => uses(n, node))) {
-      problems.push(`cannot delete ${node.kind} "${name}": still used by ${user.kind} "${user.name}" (${user.id})`);
-    }
+    for (const user of usersOf(node, name)) problems.push(`cannot delete ${node.kind} "${name}": ${used(user)}`);
     const fp = node.stored!.fingerprint as string | undefined;
     ops.push({ action: "delete", kind: node.kind, name, id: node.id, ...(fp && { fingerprint: fp }) });
   }

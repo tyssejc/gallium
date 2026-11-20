@@ -233,3 +233,83 @@ test("the bulk shape: one trigger plus N tag patches", () => {
   }
   expect(ops[1]!.body).toEqual({ ...storedTag("10"), blockingTriggerId: ["@new:trigger:block - gpc enabled"] });
 });
+
+test("a rename onto an existing entity's name is an error naming both ids", () => {
+  expect(problems([{ kind: "tag", name: "Ads - Linker", rename: "ga4 - purchase" }]))
+    .toEqual(['2 tags would be named "ga4 - purchase" (ids 10, 11)']);
+});
+
+test("a rename onto a created entity's name is an error naming both ids", () => {
+  expect(problems([{ kind: "tag", name: "New", type: "html" }, { kind: "tag", name: "Ads - Linker", rename: "New" }]))
+    .toEqual(['2 tags would be named "New" (ids 11, @new:tag:new)']);
+});
+
+test("a delete and a rename-target patch cannot claim the same entity", () => {
+  expect(problems([
+    { kind: "tag", name: "GA4 - Purchase", delete: true },
+    { kind: "tag", name: "X", rename: "GA4 - Purchase", paused: true },
+  ])).toEqual(['tag "X": refers to the same tag (10) as tag "GA4 - Purchase"']);
+});
+
+test("two renames cannot claim the same entity", () => {
+  expect(problems([
+    { kind: "tag", name: "GA4 - Purchase", rename: "B" },
+    { kind: "tag", name: "C", rename: "GA4 - Purchase" },
+  ])).toEqual(['tag "C": refers to the same tag (10) as tag "GA4 - Purchase"']);
+});
+
+test("deleting a tag used as another tag's setup tag, or by a tagReference parameter, is refused", () => {
+  const setup = fixture();
+  (setup.tag![1] as unknown as Record<string, unknown>).setupTag = [{ tagName: "GA4 - Purchase" }];
+  expect(problems([{ kind: "tag", name: "GA4 - Purchase", delete: true }], setup))
+    .toEqual(['cannot delete tag "GA4 - Purchase": still used by tag "Ads - Linker" (11)']);
+
+  const param = fixture();
+  param.tag![1]!.parameter = [{ type: "tagReference", key: "tag", value: "GA4 - Purchase" }];
+  expect(problems([{ kind: "tag", name: "GA4 - Purchase", delete: true }], param))
+    .toEqual(['cannot delete tag "GA4 - Purchase": still used by tag "Ads - Linker" (11)']);
+});
+
+test("deleting a trigger inside a trigger group is refused", () => {
+  const snap = fixture();
+  snap.trigger!.push(
+    { triggerId: "4", name: "Shop", type: "pageview" },
+    { triggerId: "6", name: "Group", type: "triggerGroup", parameter: [{ type: "list", key: "triggerIds",
+      list: [{ type: "triggerReference", value: "4" }] }] },
+  );
+  expect(problems([{ kind: "trigger", name: "Shop", delete: true }], snap))
+    .toEqual(['cannot delete trigger "Shop": still used by trigger "Group" (6)']);
+});
+
+test("deleting a variable referenced only in a trigger's top-level field is refused", () => {
+  const snap = fixture();
+  (snap.trigger![0] as unknown as Record<string, unknown>).waitForTimeout = { type: "template", value: "{{JS - GPC Enabled}}" };
+  expect(problems([{ kind: "variable", name: "JS - GPC Enabled", delete: true }], snap))
+    .toEqual(['cannot delete variable "JS - GPC Enabled": still used by trigger "All Pages" (3)']);
+});
+
+test("renaming a variable still referenced is refused, and allowed when the spec patches the referrer", () => {
+  const snap = () => {
+    const s = fixture();
+    s.tag![0]!.parameter = [{ type: "template", key: "eventName", value: "{{JS - GPC Enabled}}" }];
+    return s;
+  };
+  const rename: SpecEntry = { kind: "variable", name: "JS - GPC Enabled", rename: "JS - GPC" };
+  expect(problems([rename], snap()))
+    .toEqual(['cannot rename variable "JS - GPC Enabled" to "JS - GPC": still used by tag "GA4 - Purchase" (10)']);
+
+  const ops = buildPlan([rename, { kind: "tag", name: "GA4 - Purchase",
+    parameter: [{ type: "template", key: "eventName", value: "{{JS - GPC}}" }] }], snap());
+  expect(summary(ops)).toEqual(["update variable JS - GPC Enabled", "update tag GA4 - Purchase"]);
+
+  // Also allowed when the same spec renames another variable to the old name.
+  const withOther = snap();
+  withOther.variable!.push({ variableId: "9", name: "Other", type: "c" });
+  expect(summary(buildPlan([rename, { kind: "variable", name: "Other", rename: "JS - GPC Enabled" }], withOther)))
+    .toEqual(["update variable JS - GPC Enabled", "update variable Other"]);
+});
+
+test("{paused:false} on an unpaused tag is unchanged", () => {
+  expect(buildPlan([{ kind: "tag", name: "Ads - Linker", paused: false, notes: "" }], fixture()))
+    .toEqual([{ action: "unchanged", kind: "tag", name: "Ads - Linker", id: "11" }]);
+});
