@@ -1,6 +1,9 @@
 import { test, expect } from "bun:test";
 import { buildPlan, newRef, PlanError, type Op } from "./plan.ts";
-import type { SpecEntry } from "./spec.ts";
+import { loadSpec, type SpecEntry } from "./spec.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { EntitySnapshot } from "../pull/pull.ts";
 
 // Raw API objects carry fields the TS types don't declare; the planner must keep them.
@@ -312,4 +315,33 @@ test("renaming a variable still referenced is refused, and allowed when the spec
 test("{paused:false} on an unpaused tag is unchanged", () => {
   expect(buildPlan([{ kind: "tag", name: "Ads - Linker", paused: false, notes: "" }], fixture()))
     .toEqual([{ action: "unchanged", kind: "tag", name: "Ads - Linker", id: "11" }]);
+});
+
+test("a rename onto the name of an entity the same spec deletes is refused", () => {
+  expect(problems([
+    { kind: "tag", name: "Ads - Linker", delete: true },
+    { kind: "tag", name: "GA4 - Purchase", rename: "Ads - Linker" },
+  ])).toEqual(['tag "GA4 - Purchase": "Ads - Linker" is held by tag 11, which this spec deletes; ' +
+    "delete it first, then reuse the name in a second apply"]);
+});
+
+test("a create under the name of an entity the same spec deletes is rejected", async () => {
+  // A create entry with the deleted entity's name is the same kind+name, so
+  // the loader's duplicate check rejects it before the planner sees it...
+  const dir = await mkdtemp(join(tmpdir(), "gallium-plan-"));
+  try {
+    const path = join(dir, "spec.json");
+    await Bun.write(path, JSON.stringify([
+      { kind: "tag", name: "Ads - Linker", delete: true },
+      { kind: "tag", name: "Ads - Linker", type: "html" },
+    ]));
+    await expect(loadSpec(path)).rejects.toThrow('entry 1: duplicate of entry 0 (tag "Ads - Linker")');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+  // ...and the planner, given it directly, reports a double claim on the stored entity.
+  expect(problems([
+    { kind: "tag", name: "Ads - Linker", delete: true },
+    { kind: "tag", name: "ads - linker", type: "html" },
+  ])).toEqual(['tag "ads - linker": refers to the same tag (11) as tag "Ads - Linker"']);
 });

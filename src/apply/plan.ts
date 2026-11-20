@@ -141,14 +141,21 @@ export function buildPlan(entries: SpecEntry[], snap: EntitySnapshot): Op[] {
     }
   }
 
-  // A rename or create must not leave two live entities sharing a name.
+  // A rename or create must not leave two live entities sharing a name, nor
+  // take a name from an entity this spec deletes: GTM rejects duplicate names
+  // and writes run before deletes, so that would fail mid-apply.
   const collided = new Set<string>();
-  for (const { node } of writes) {
+  for (const { label, node } of writes) {
     const key = `${node.kind}\0${normName(node.name)}`;
     const same = liveNamed(node.kind, node.name);
     if (same.length > 1 && !collided.has(key)) {
       collided.add(key);
       problems.push(`${same.length} ${node.kind}s would be named "${node.name}" (ids ${idsOf(same)})`);
+    }
+    const doomed = nodes.filter((n) => n.deleted && n.kind === node.kind && normName(n.name) === normName(node.name));
+    if (doomed.length) {
+      problems.push(`${label}: "${node.name}" is held by ${node.kind} ${idsOf(doomed)}, which this spec deletes; ` +
+        `delete it first, then reuse the name in a second apply`);
     }
   }
 
