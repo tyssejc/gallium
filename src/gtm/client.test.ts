@@ -195,3 +195,53 @@ test("does not retry a permission 403", async () => {
   await expect(client.listTags("accounts/1/containers/2/workspaces/3")).rejects.toThrow(/403/);
   expect(fetches).toBe(1);
 });
+
+function capture(res: () => Response) {
+  const seen: { url: string; init: RequestInit }[] = [];
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    seen.push({ url, init });
+    return res();
+  }) as unknown as typeof fetch;
+  return { seen, client: new GtmClient("tok", fetchFn) };
+}
+
+test("createWorkspace POSTs the name", async () => {
+  const { seen, client } = capture(() => jsonResponse({ workspaceId: "9", name: "X" }));
+  const ws = await client.createWorkspace("1", "2", "X");
+  expect(ws.workspaceId).toBe("9");
+  expect(seen[0]!.init.method).toBe("POST");
+  expect(seen[0]!.url.endsWith("/accounts/1/containers/2/workspaces")).toBe(true);
+  expect(JSON.parse(seen[0]!.init.body as string)).toEqual({ name: "X" });
+  expect((seen[0]!.init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+});
+
+test("createEntity POSTs to the plural path", async () => {
+  const { seen, client } = capture(() => jsonResponse({ triggerId: "5" }));
+  await client.createEntity("accounts/1/containers/2/workspaces/3", "trigger", { name: "T" });
+  expect(seen[0]!.init.method).toBe("POST");
+  expect(seen[0]!.url.endsWith("/workspaces/3/triggers")).toBe(true);
+  expect(JSON.parse(seen[0]!.init.body as string)).toEqual({ name: "T" });
+});
+
+test("updateEntity PUTs with the fingerprint query", async () => {
+  const { seen, client } = capture(() => jsonResponse({ tagId: "7" }));
+  await client.updateEntity("accounts/1/containers/2/workspaces/3", "tag", "7", { name: "N" }, "123");
+  expect(seen[0]!.init.method).toBe("PUT");
+  expect(seen[0]!.url.endsWith("/tags/7?fingerprint=123")).toBe(true);
+  expect(JSON.parse(seen[0]!.init.body as string)).toEqual({ name: "N" });
+});
+
+test("deleteEntity sends DELETE and tolerates an empty 204 body", async () => {
+  const { seen, client } = capture(() => new Response(null, { status: 204 }));
+  await expect(client.deleteEntity("accounts/1/containers/2/workspaces/3", "folder", "4")).resolves.toBeUndefined();
+  expect(seen[0]!.init.method).toBe("DELETE");
+  expect(seen[0]!.url.endsWith("/workspaces/3/folders/4")).toBe(true);
+});
+
+test("the client has no publish, version or environment write path", async () => {
+  const src = await Bun.file(new URL("./client.ts", import.meta.url)).text();
+  expect(src).not.toMatch(/:publish|create_version|quick_preview|:set_latest|reauthorize/);
+  const writes = [...src.matchAll(/request\(\s*"(POST|PUT|DELETE)"[^)]*\)/g)].map((m) => m[0]);
+  for (const w of writes) expect(w).not.toMatch(/environments|versions/);
+  expect(writes.length).toBe(4);
+});

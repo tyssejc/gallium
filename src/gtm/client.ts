@@ -1,6 +1,6 @@
 import type {
   GtmTag, GtmTrigger, GtmVariable, GtmBuiltInVariable, GtmFolder, GtmTemplate, WorkspaceStatus,
-  GtmAccount, GtmContainer, GtmWorkspace, GtmEnvironment, GtmVersionHeader, GtmContainerVersion,
+  GtmAccount, GtmContainer, GtmWorkspace, GtmEnvironment, GtmVersionHeader, GtmContainerVersion, WriteKind,
 } from "./types.ts";
 
 import { isQuotaError, type Pacer } from "./pace.ts";
@@ -109,5 +109,19 @@ export class GtmClient {
   }
   getLatestVersionHeader(accountId: string, containerId: string): Promise<GtmVersionHeader> {
     return this.getJson(`${this.containerPath(accountId, containerId)}/version_headers:latest`);
+  }
+
+  // The only write calls this client has: workspace and workspace-entity edits.
+  createWorkspace(accountId: string, containerId: string, name: string, description?: string): Promise<GtmWorkspace> {
+    return this.request("POST", `accounts/${accountId}/containers/${containerId}/workspaces`, { body: { name, ...(description ? { description } : {}) } });
+  }
+  createEntity(ws: string, kind: WriteKind, body: object): Promise<any> {
+    return this.request("POST", `${ws}/${kind}s`, { body });
+  }
+  updateEntity(ws: string, kind: WriteKind, id: string, body: object, fingerprint?: string): Promise<any> {
+    return this.request("PUT", `${ws}/${kind}s/${id}`, { body, query: fingerprint ? { fingerprint } : {} });
+  }
+  async deleteEntity(ws: string, kind: WriteKind, id: string): Promise<void> {
+    await this.request("DELETE", `${ws}/${kind}s/${id}`);
   }
 }

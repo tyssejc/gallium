@@ -6,6 +6,7 @@ export interface GtmTag {
   tagId: string; name: string; type: string; parameter?: GtmParameter[];
   firingTriggerId?: string[]; blockingTriggerId?: string[];
   parentFolderId?: string; paused?: boolean; notes?: string;
+  fingerprint?: string; path?: string;
 }
 export interface GtmCondition { type?: string; parameter?: GtmParameter[]; }
 export interface GtmTrigger {
@@ -13,13 +14,16 @@ export interface GtmTrigger {
   parameter?: GtmParameter[]; filter?: GtmCondition[]; customEventFilter?: GtmCondition[];
   autoEventFilter?: GtmCondition[];
   parentFolderId?: string; notes?: string;
+  fingerprint?: string; path?: string;
 }
 export interface GtmVariable {
   variableId: string; name: string; type: string;
   parameter?: GtmParameter[]; parentFolderId?: string; notes?: string;
+  fingerprint?: string; path?: string;
 }
 export interface GtmBuiltInVariable { type: string; name: string; }
-export interface GtmFolder { folderId: string; name: string; }
+export interface GtmFolder { folderId: string; name: string; fingerprint?: string; path?: string; }
+export type WriteKind = "tag" | "trigger" | "variable" | "folder";
 export interface GtmTemplate { templateId: string; name: string; templateData?: string; }
 
 export interface GtmAccount { accountId: string; name: string; }
